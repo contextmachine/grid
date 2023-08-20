@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "mfb-grid"
+version = "0.1.0"
+description = ""
+authors = ["sf-d <sf@contextmachine.ru>", "sth-v <aa@contextmachine.ru>"]
+readme = "README.md"
+packages = [{include = "src"}]
+
+[tool.poetry.dependencies]
+python = ">=3.9,<3.12"
+mmcore = {git = "https://github.com/contextmachine/mmcore.git"}
+
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
