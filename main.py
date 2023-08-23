@@ -87,25 +87,30 @@ class Buf(GeometryBuffer):
 
 from scipy.spatial import KDTree
 
+
+
 with open("swdata/masks/_project.json", "r") as msk:
     projmask = json.load(msk)
-    #projmask = projmask[100:155]
+    projmask = projmask[1930:1955]
 
 with open("swdata/SW_triangles_cutted.gz", "rb") as msk:
     tri = json.loads(gzip.decompress(msk.read()).decode())
-    #tri = tri[100:155]
+    tri = tri[1930:1955]
 
 with open("swdata/SW_triangles.gz", "rb") as msk:
     tri_no_cut = json.loads(gzip.decompress(msk.read()).decode())
-    #tri_no_cut = tri_no_cut[100:155]
+    tri_no_cut=tri_no_cut[1930:1955]
 
 with open("swdata/SW_centers.json", "r") as msk:
     tri_cen = json.load(msk)
-    #tri_cen = tri_cen[100:155]
+    tri_cen = tri_cen[1930:1955]
 
 with open("swdata/SW_names.json", "r") as msk:
     tri_names = json.load(msk)
-    #tri_names = tri_names[100:150]
+    tri_names = tri_names[1930:1955]
+
+
+
 
 import numpy as np
 
@@ -114,12 +119,9 @@ Triangle.table = GeometryBuffer(uuid='default')
 itm2 = []
 from mmcore.geom.materials import ColorRGB
 
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 arr = np.asarray(tri_cen).reshape((len(tri_cen), 3))
 arr[..., 2] *= 0
-
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
 def check_mask(mask):
@@ -143,10 +145,6 @@ def solve_kd(new_data):
     reflection["kd"] = kd
     dist, ix = reflection['kd'].query(arr, distance_upper_bound=200)
 
-    #for i, v in enumerate(dist):
-        #print(v, reflection['data'][i])
-        #print(v)
-
     reflection["ix"] = ix
 
 
@@ -160,18 +158,6 @@ if _dt is not None:
     solve_kd(json.loads(_dt))
 
 
-def colors_loader(defaults):
-    try:
-        with open(".mmcache/colors.json", "r") as cl:
-            return json.load(cl)
-    except FileNotFoundError as err:
-        print(err)
-        cols = dict()
-        cols |= defaults
-        return cols
-
-
-from mmcore.base.tags import TagDB
 
 from mmcore.base.tags import TagDB
 
@@ -212,6 +198,7 @@ def solve_triangles():
         try:
             reflection["data"][j]
         except IndexError:
+            print(False)
             j = j - 1
 
         tag = f'{reflection["data"][j]["arch_type"]}-{reflection["data"][j]["eng_type"]}'
@@ -228,6 +215,7 @@ def solve_triangles():
                 # print(uuid)
 
                 if len(ppp) > 1:
+                    print(len(ppp), i)
 
                     pan = CompoundPanel(uuid=uuid, name=tri_names[i].replace(":", "_"),
                                         _endpoint="triangle_handle/" + uuid,
@@ -249,6 +237,19 @@ def solve_triangles():
                                                                                )
 
                                         )
+                        '''panel = trii.mesh_data.to_mesh(cls=PanelMesh,
+                                                     uuid=uuid + f"_{k + 1}",
+                                                     name=uuid + f"_{k + 1}",
+
+                                                     color=ColorRGB(*cols[tag]).decimal,
+
+                                                     _endpoint="triangle_handle/" + uuid,
+                                                     )
+                        panel.controls = props_table[uuid + f"_{k + 1}"]
+                        panel._endpoint = "triangle_handle/" + uuid
+                        pan.__setattr__(f"part{k + 1}", panel)'''
+
+
 
                     reflection["tri_items"][uuid] = pan
 
@@ -270,6 +271,7 @@ def solve_triangles():
 
 
 solve_triangles()
+
 for _k, _v in dict(rmasks).items():
     props_table.set_column(_k, dict(zip(props_table.get_column("tag").keys(), _v)))
 
@@ -300,7 +302,7 @@ class MaskedRequest(Component):
 
         for i, uid in enumerate(reflection["tri_items"].keys()):
 
-            if all([vl[i] <= 1 for vl in msks.values()]):
+            if all([vl[i] <= 2 for vl in msks.values()]):
                 idict["mfb_sw_l2_panels"]["__children__"].add(uid)
 
         grp.scale(0.001, 0.001, 0.001)
