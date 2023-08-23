@@ -240,7 +240,6 @@ def solve_triangles():
                         panel._endpoint = "triangle_handle/" + uuid + f"_{k + 1}"
 
                         pan.__setattr__(f"part{k + 1}", panel)
-                        #reflection["tri_items"][uuid + f"_{k + 1}"] = panel
 
                     reflection["tri_items"][uuid ] = pan
                 else:
