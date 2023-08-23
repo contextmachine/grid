@@ -91,23 +91,23 @@ from scipy.spatial import KDTree
 
 with open("swdata/masks/_project.json", "r") as msk:
     projmask = json.load(msk)
-    projmask = projmask[1930:1955]
+    #projmask = projmask[1930:1955]
 
 with open("swdata/SW_triangles_cutted.gz", "rb") as msk:
     tri = json.loads(gzip.decompress(msk.read()).decode())
-    tri = tri[1930:1955]
+    #tri = tri[1930:1955]
 
 with open("swdata/SW_triangles.gz", "rb") as msk:
     tri_no_cut = json.loads(gzip.decompress(msk.read()).decode())
-    tri_no_cut=tri_no_cut[1930:1955]
+    #tri_no_cut=tri_no_cut[1930:1955]
 
 with open("swdata/SW_centers.json", "r") as msk:
     tri_cen = json.load(msk)
-    tri_cen = tri_cen[1930:1955]
+    #tri_cen = tri_cen[1930:1955]
 
 with open("swdata/SW_names.json", "r") as msk:
     tri_names = json.load(msk)
-    tri_names = tri_names[1930:1955]
+    #tri_names = tri_names[1930:1955]
 
 
 
@@ -160,6 +160,7 @@ if _dt is not None:
 
 
 from mmcore.base.tags import TagDB
+from copy import deepcopy
 
 props_table = TagDB("mfb_sw_l2_panels")
 
@@ -175,13 +176,13 @@ class PanelMesh(AMesh):
 
 
 class CompoundPanel(A):
-    @property
+    '''@property
     def properties(self):
         return props_table[self.uuid]
-
     @properties.setter
     def properties(self, props: dict):
-        props_table[self.uuid].set(dict(props))
+        props_table[self.uuid].set(dict(props))'''
+    ...
 
 
 from mmcore.services.redis import sets
@@ -191,78 +192,64 @@ reflection["tri_items"] = dict()
 cols = dict(sets.Hdict("mfb:sw:l2:colors"))
 
 
-
 def solve_triangles():
     for i, j in enumerate(reflection['ix']):
-
         try:
             reflection["data"][j]
         except IndexError:
-            print(False)
+            #print(False)
             j = j - 1
-
         tag = f'{reflection["data"][j]["arch_type"]}-{reflection["data"][j]["eng_type"]}'
-
         if tag not in cols:
             cols[tag] = np.random.randint(30, 230, 3).tolist()
-
         for ppp in tri[i]:
             uuid = tri_names[i].replace(":", "_")
             props_table[uuid]["tag"] = tag
             props_table[uuid] = reflection['data'][j]
             props_table[uuid]["cut"] = cut_mask[i]
             if uuid not in reflection["tri_items"].keys():
-                # print(uuid)
 
                 if len(ppp) > 1:
-                    print(len(ppp), i)
-
                     pan = CompoundPanel(uuid=uuid, name=tri_names[i].replace(":", "_"),
                                         _endpoint="triangle_handle/" + uuid,
-
                                         )
-
-                    pan.controls = props_table[uuid]
+                    # pan.controls = props_table[uuid]
                     pan._endpoint = "triangle_handle/" + uuid
-
                     for k, pts in enumerate(ppp):
+
+                        new_props = deepcopy(props_table[uuid])
+                        #print(new_props)
+
+                        try:
+                            props_table[uuid + f"_{k + 1}"].set(dict(new_props))
+                            #print('got it 1')
+                        except:
+                            props_table[uuid + f"_{k + 1}"] = dict(new_props)
+                            #print('got it 2')
+
                         trii = Triangle(*pts)
                         trii.triangulate()
-                        pan.__setattr__(f"part{k + 1}", trii.mesh_data.to_mesh(cls=AMesh,
-                                                                               uuid=uuid + f"_{k + 1}",
-                                                                               name=uuid + f"_{k + 1}",
-                                                                               color=ColorRGB(*cols[tag]).decimal,
-                                                                               _endpoint="triangle_handle/" + uuid,
-                                                                               properties=props_table[uuid],
-                                                                               )
+                        panel = trii.mesh_data.to_mesh(cls=PanelMesh,
+                                                       uuid=uuid + f"_{k + 1}",
+                                                       name=uuid + f"_{k + 1}",
+                                                       color=ColorRGB(*cols[tag]).decimal,
+                                                       _endpoint="triangle_handle/" + uuid,
+                                                       )
 
-                                        )
-                        '''panel = trii.mesh_data.to_mesh(cls=PanelMesh,
-                                                     uuid=uuid + f"_{k + 1}",
-                                                     name=uuid + f"_{k + 1}",
-
-                                                     color=ColorRGB(*cols[tag]).decimal,
-
-                                                     _endpoint="triangle_handle/" + uuid,
-                                                     )
                         panel.controls = props_table[uuid + f"_{k + 1}"]
-                        panel._endpoint = "triangle_handle/" + uuid
-                        pan.__setattr__(f"part{k + 1}", panel)'''
+                        panel._endpoint = "triangle_handle/" + uuid + f"_{k + 1}"
 
+                        pan.__setattr__(f"part{k + 1}", panel)
+                        #reflection["tri_items"][uuid + f"_{k + 1}"] = panel
 
-
-                    reflection["tri_items"][uuid] = pan
-
-
+                    reflection["tri_items"][uuid ] = pan
                 else:
                     trii = Triangle(*ppp[0])
                     trii.triangulate()
                     pan = trii.mesh_data.to_mesh(cls=PanelMesh,
                                                  uuid=uuid,
                                                  name=uuid,
-
                                                  color=ColorRGB(*cols[tag]).decimal,
-
                                                  _endpoint="triangle_handle/" + uuid,
                                                  )
                     pan.controls = props_table[uuid]
@@ -301,8 +288,9 @@ class MaskedRequest(Component):
         msks = dict(check_mask(self.masks))
 
         for i, uid in enumerate(reflection["tri_items"].keys()):
+            print(i, uid)
 
-            if all([vl[i] <= 2 for vl in msks.values()]):
+            if all([vl[i] <= 1 for vl in msks.values()]):
                 idict["mfb_sw_l2_panels"]["__children__"].add(uid)
 
         grp.scale(0.001, 0.001, 0.001)
