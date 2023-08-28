@@ -18,7 +18,7 @@ spec:
       containers:
 
         - name: mfb-sw-l2-container
-          image:  cr.yandex/crpfskvn79g5ht8njq0k/mfb_sw_l2
+          image:  cr.yandex/crpfskvn79g5ht8njq0k/mfb_sw_l2:latest
           imagePullPolicy: Always
           env:
           - name: MMCORE_APPPREFIX
