@@ -16,14 +16,14 @@ from mmcore.geom.point import GeometryBuffer, BUFFERS
 import dataclasses
 from mmcore.geom.shapes.base import Triangle
 import os
-
+from src.pairs import gen_pair_stats,gen_stats_to_pairs,solve_pairs_stats
 from mmcore.base import ALine, A, APoints, AGroup
 
 # This Api provides an extremely flexible way of updating data. You can pass any part of the parameter dictionary
 # structure, the parameters will be updated recursively and only the part of the graph affected by the change
 # will be recalculated.
 
-reflection = dict()
+
 import json
 import dotenv
 
@@ -74,7 +74,7 @@ def prettify(dt, buff=None):
         }
 
 
-import pickle
+
 
 rmasks = sets.Hdict("mfb:sw:l1:masks")
 cut_mask = rmasks["cut_mask"]
@@ -182,7 +182,7 @@ class CompoundPanel(A):
     @properties.setter
     def properties(self, props: dict):
         props_table[self.uuid].set(dict(props))'''
-    ...
+
 
 
 from mmcore.services.redis import sets
@@ -287,7 +287,7 @@ class MaskedRequest(Component):
         msks = dict(check_mask(self.masks))
 
         for i, uid in enumerate(reflection["tri_items"].keys()):
-            print(i, uid)
+            print(f'solve {i} {uid}', flush=True, end="\r")
 
             if all([vl[i] <= 1 for vl in msks.values()]):
                 idict["mfb_sw_l2_panels"]["__children__"].add(uid)
@@ -304,6 +304,7 @@ cmr = MaskedRequest(uuid="mfb_sw_l2_panels", name="mfb_sw_l2_panels", masks={
     "cut_mask": False
 })
 
+solve_pairs_stats(reflection=reflection,props=props_table)
 import pandas as pd
 
 
@@ -347,6 +348,7 @@ async def create_upload_file(file: UploadFile):
         solve_kd(json.loads(content.decode()))
         solve_triangles()
         cmr()
+        solve_pairs_stats(reflection=reflection, props=props_table)
         # path=os.getcwd()+"/model.3dm"
         # obj.dump3dm().Write(path,7)
 
@@ -361,7 +363,7 @@ async def upjf():
 
 <body>
 </form>
-<form action="{os.getenv("MMCORE_APPPREFIX")}upload_json" enctype="multipart/form-data" method="post">
+<form action="{os.getenv("MMCORE_APPPREFIX")}/upload_json" enctype="multipart/form-data" method="post">
 <input name="file" type="file">
 <input type="submit">
 </form>
@@ -369,20 +371,20 @@ async def upjf():
     """
     return HTMLResponse(content=content)
 
-with open("/Users/sofya/PycharmProjects/grid/swdata/latest/buff.json", "w") as f:
-    json.dump(reflection["data_pts"], f)
 
-with open("/Users/sofya/PycharmProjects/grid/swdata/latest/data.json", "w") as f:
-    json.dump(reflection["data"], f)
+@serve.app.get("/stats")
+def stats():
+    return list(gen_stats_to_pairs(props_table=props_table))
+@serve.app.get("/stats/pairs")
+def stats_pairs():
 
-@serve.app.post("table/{name}")
-def stats(name: str, data: dict):
-    tab = pd.DataFrame(cmr(mask_name=name, mask_buffer=data["mask"])._itm2)
-    tab.to_csv("table.csv")
-    return FileResponse("table.csv", filename="table.csv", media_type="application/csv")
+    return reflection["pairs_stats"]
 
 
-app = FastAPI()
-app.mount(os.getenv("MMCORE_APPPREFIX"), serve.app)
+
+
+aapp = FastAPI()
+aapp.mount(os.getenv("MMCORE_APPPREFIX"), serve.app)
+
 if __name__ == "__main__":
-    uvicorn.run("main:app", host='0.0.0.0', port=7711)
+    uvicorn.run("main:aapp", host='0.0.0.0', port=7711)
