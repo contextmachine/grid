@@ -36,7 +36,7 @@ A.__gui_controls__.config.api_prefix = os.getenv("MMCORE_APPPREFIX")
 from mmcore.geom.point import GeometryBuffer, BUFFERS
 import dataclasses
 
-reflection = dict()
+reflection = dict(recompute_repr3d=True)
 from mmcore.services.redis.connect import get_cloud_connection
 from mmcore.services.redis import sets
 
@@ -146,7 +146,7 @@ def solve_kd(new_data):
     dist, ix = reflection['kd'].query(arr, distance_upper_bound=200)
 
     reflection["ix"] = ix
-
+    reflection["recompute_repr3d"]=True
 
 from mmcore.base import AGroup
 
@@ -274,8 +274,11 @@ class MaskedRequest(Component):
         else:
             super().__call__(**kwargs)
 
-        if "kd" in reflection.keys():
+        if reflection["recompute_repr3d"]:
+
             self.__repr3d__()
+            reflection["recompute_repr3d"]=False
+
         return self
 
     def __repr3d__(self):
@@ -346,6 +349,7 @@ async def create_upload_file(file: UploadFile):
 
         rconn.set(f"api:mmcore:runtime:mfb:sw:l2:datapoints", content.decode())
         solve_kd(json.loads(content.decode()))
+
         solve_triangles()
         cmr()
         solve_pairs_stats(reflection=reflection, props=props_table)
