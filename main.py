@@ -54,21 +54,8 @@ else:
     props_table=pickle.loads(props_table)
 print(props_table)
 
-index_map=[]
-"""
-rmask_db = RedisBind(ref=reflection, conn=rconn,index_map=index_map,
-           projmask=Column(reference=True, dtype=int),
-           cut_mask=Column(reference=True, dtype=int),
 
-            parent_uuid=Column(reference=True, dtype=str),
-            tri_cen=Column(reference=True, dtype=list),
-            eng_type=Column(reference=True, dtype=int),
-            arch_type=Column(reference=True, dtype=str, default="A"),
-            mount=Column(reference=False, dtype=int, default=0),
-            self_uuid = Column(reference=False, dtype=str)
 
-           )
-mask_db =rmask_db.db"""
 def prettify(dt, buff=None):
     if buff is None:
         reflection["data_pts"] = []
@@ -297,48 +284,7 @@ def masked_group1(owner_uuid, name,mode=True):
     return grp
 
 
-"""class MaskedRequest(Component):
-    masks: dict = {}
 
-    _itms = dict()
-
-    def __call__(self, masks=None, **kwargs):
-
-        if masks is not None:
-
-            super().__call__(masks=masks, **kwargs)
-            reflection["recompute_repr3d"]=True
-        else:
-            super().__call__(**kwargs)
-
-        if reflection["recompute_repr3d"]:
-
-            self.__repr3d__()
-            reflection["recompute_repr3d"]=False
-
-        return self
-
-    def __repr3d__(self):
-        global props_table
-
-        self._repr3d=masked_group1("mfb_sw_l2_panels", "cut")
-        grp = AGroup(uuid="mfb_sw_l2_panels", name="SW L2 panels", _endpoint=self.endpoint,
-                     controls=self.param_node.todict())
-        idict["mfb_sw_l2_panels"]["__children__"] = set()
-        msks = dict(check_mask(self.masks))
-
-        for i, uid in enumerate(reflection["tri_items"].keys()):
-            print(f'solve {i} {uid}', flush=True, end="\r")
-
-            if all([vl[i] <= 1 for vl in msks.values()]):
-                idict["mfb_sw_l2_panels"]["__children__"].add(uid)
-
-        grp.scale(0.001, 0.001, 0.001)
-
-        self._repr3d = grp
-
-        return self._repr3d
-"""
 
 _dt = rconn.get(f"api:mmcore:runtime:mfb:sw:l2:datapoints")
 
@@ -353,10 +299,7 @@ def on_shutdown():
 
 
 solve_triangles()
-#cmr = MaskedRequest(uuid="mfb_sw_l2_panels", name="mfb_sw_l2_panels", masks={
-#    "projmask": True,
-#    "cut_mask": False
-#})
+
 grp = AGroup(uuid="mfb_sw_l2_panels", name="SW L2 panels",
              )
 
