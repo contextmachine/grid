@@ -9,9 +9,11 @@ import dotenv
 import numpy as np
 import pandas as pd
 
+
+
 dotenv.load_dotenv(dotenv_path=".env")
 reflection = dict(recompute_repr3d=True, mask_index=dict())
-
+from src.props import TAGDB
 from copy import deepcopy
 from fastapi import FastAPI, UploadFile
 from starlette.responses import FileResponse, HTMLResponse
@@ -29,7 +31,7 @@ from mmcore.services.redis.connect import get_cloud_connection
 from mmcore.services.redis import sets
 from mmcore.base import ALine, A, APoints, AGroup
 from mmcore.base.tags import TagDB
-
+print(TAGDB)
 from src.pairs import gen_pair_stats,gen_stats_to_pairs,solve_pairs_stats
 from src.parts import Column, Db, Part, RedisBind
 
@@ -40,20 +42,13 @@ from src.parts import Column, Db, Part, RedisBind
 A.__gui_controls__.config.address = os.getenv("MMCORE_ADDRESS")
 A.__gui_controls__.config.api_prefix = os.getenv("MMCORE_APPPREFIX")
 
+from src.root_group import RootGroup, props_table
 rconn = get_cloud_connection()
 sets.rconn = rconn
 rmasks = sets.Hdict("mfb:sw:l1:masks")
 cols = dict(sets.Hdict("mfb:sw:l2:colors"))
 reflection["tri_items"] = dict()
 #props_table = TagDB("mfb_sw_l2_panels")
-props_table =rconn.get(f"api:mmcore:runtime:mfb:sw:l2:tagdb")
-
-if props_table is None:
-    props_table = TagDB("mfb_sw_l2_panels")
-else:
-    props_table=pickle.loads(props_table)
-print(props_table)
-
 
 
 def prettify(dt, buff=None):
@@ -221,7 +216,11 @@ def solve_triangles():
                         new_props = deepcopy(props_table[uuid])
                         #print(new_props)
                         d=dict(new_props)
-                        mnt=d.pop("mount")
+                        if "mount" in d.keys():
+                            mnt=d.pop("mount")
+                        else:
+                            props_table.add_column("mount", default=0,column_type=int)
+                            mnt=0
 
                         try:
                             props_table[uuid + f"_{k + 1}"].set(d)
@@ -272,7 +271,7 @@ def masked_group1(owner_uuid, name,mode=True):
     if uid in adict.keys():
         grp = adict[uid]
     else:
-        grp = AGroup(name=adict[owner_uuid].name, uuid=f"{owner_uuid}_masked_{name}")
+        grp = RootGroup(name=adict[owner_uuid].name, uuid=f"{owner_uuid}_masked_{name}")
         grp.scale(0.001,0.001,0.001)
 
     if mode:
@@ -294,13 +293,13 @@ if _dt is not None:
     solve_kd(json.loads(_dt))
 
 def on_shutdown():
-    return rconn.set(f"api:mmcore:runtime:mfb:sw:l2:tagdb",pickle.dumps(props_table))
+    return rconn.set(TAGDB, pickle.dumps(props_table))
 
 
 
 solve_triangles()
 
-grp = AGroup(uuid="mfb_sw_l2_panels", name="SW L2 panels",
+grp = RootGroup(uuid="mfb_sw_l2_panels", name="SW L2 panels",
              )
 
 idict["mfb_sw_l2_panels"]["__children__"] = set()
@@ -324,12 +323,6 @@ async def stats1():
     return FileResponse("table.csv", filename="table.csv", media_type="application/csv")
 
 
-@serve.app.post("/triangle_handle/{uid}")
-async def triangle_handle(uid, properties: dict):
-    props_table[uid].set(properties)
-
-    adict[uid].controls = props_table[uid]
-    return dict(props_table[uid])
 
 
 @serve.app.post("/masks/add/{name}")
@@ -356,47 +349,61 @@ async def mask_handle_v2(uuid:str, name:str, data: dict):
 
     return grp.root()
 
+@serve.app.post("/triangle_handle/{uid}")
+async def triangle_handle(uid, properties: dict):
+    props_table[uid].set(properties)
+
+    adict[uid].controls = props_table[uid]
+    return dict(props_table[uid])
 
 @serve.app.get("/triangle_handle/{uid}")
 async def triangle_handle_get(uid: str):
     return props_table[uid]
 
 
-@serve.app.post("/upload_json")
-async def create_upload_file(file: UploadFile):
-    try:
-
-        content = await file.read()
-
-        rconn.set(f"api:mmcore:runtime:mfb:sw:l2:datapoints", content.decode())
-        solve_kd(json.loads(content.decode()))
-
-        solve_triangles()
-        #cmr()
-
-        solve_pairs_stats(reflection=reflection, props=props_table)
-
-        # path=os.getcwd()+"/model.3dm"
-        # obj.dump3dm().Write(path,7)
-
-        return "Ok"
-    except Exception as err:
-        return f"error: {err}"
 
 
-@serve.app.get("/upload_form")
-async def upjf():
-    content = f"""
+@serve.app.get("/triangle_handle/{uid}")
+async def triangle_handle_get(uid: str):
+    return props_table[uid]
 
-<body>
-</form>
-<form action="{os.getenv("MMCORE_APPPREFIX")}upload_json" enctype="multipart/form-data" method="post">
-<input name="file" type="file">
-<input type="submit">
-</form>
-</body>
-    """
-    return HTMLResponse(content=content)
+
+if os.getenv("TEST_DEPLOYMENT") is None:
+    @serve.app.post("/upload_json")
+    async def create_upload_file(file: UploadFile):
+        try:
+
+            content = await file.read()
+
+            rconn.set(f"api:mmcore:runtime:mfb:sw:l2:datapoints", content.decode())
+            solve_kd(json.loads(content.decode()))
+
+            solve_triangles()
+            #cmr()
+
+            solve_pairs_stats(reflection=reflection, props=props_table)
+
+            # path=os.getcwd()+"/model.3dm"
+            # obj.dump3dm().Write(path,7)
+
+            return "Ok"
+        except Exception as err:
+            return f"error: {err}"
+
+
+    @serve.app.get("/upload_form")
+    async def upjf():
+        content = f"""
+    
+    <body>
+    </form>
+    <form action="{os.getenv("MMCORE_ADDRESS")}{os.getenv("MMCORE_APPPREFIX")}upload_json" enctype="multipart/form-data" method="post">
+    <input name="file" type="file">
+    <input type="submit">
+    </form>
+    </body>
+        """
+        return HTMLResponse(content=content)
 
 @serve.app.get("/stats")
 def stats():
@@ -409,6 +416,7 @@ def stats_pairs():
 
 aapp = FastAPI(on_shutdown=[on_shutdown])
 aapp.mount(os.getenv("MMCORE_APPPREFIX"), serve.app)
+
 
 if __name__ == "__main__":
     uvicorn.run("main:aapp", host='0.0.0.0', port=7711)
