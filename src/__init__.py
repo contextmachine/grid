@@ -4,6 +4,9 @@ class Alena:
     uzel_3 = 300
 
 
+class SF:
+    ...
+
 class Pts_Core:
     offset_aluminiy = 50
     offset_triangles = 500
