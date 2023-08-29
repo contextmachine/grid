@@ -1,3 +1,5 @@
+import json
+
 from mmcore.base.params import BufferNode, Node, Graph
 from pyvis.network import Network
 
@@ -14,14 +16,14 @@ ceiling = Node(uuid='ceiling', pts_ceiling=pts_ceiling)
 
 # Основные сфоритрованные нами объекты
 l2 = Node(uuid="l2", ceiling=ceiling)
-nicheW1W4 = Node(uuid="nicheW1W4", ceiling=ceiling, core=core)
+nicheW1W4 = Node(uuid="niche_w1w4", ceiling=ceiling, core=core)
 
 
 # Контуры
-niche_L2_W1W4 = Node(uuid="nicheL2_W1W4", ceiling=l2, niche=nicheW1W4)
-pilons_L2 = Node(uuid="pilons_L2", ceiling=l2, facade_pilons=facade_pilons)
-podshivka_L2 = Node(uuid="podshivka_L2", ceiling=l2, podshivka=podshivka)
-glazing_L2 = Node(uuid="glazing_L2", ceiling=l2, glazing=facade_glazing)
+niche_L2_W1W4 = Node(uuid="niche_l2_w1w4", ceiling=l2, niche=nicheW1W4)
+pilons_L2 = Node(uuid="pilons_l2", ceiling=l2, facade_pilons=facade_pilons)
+podshivka_L2 = Node(uuid="podshivka_l2", ceiling=l2, podshivka=podshivka)
+glazing_L2 = Node(uuid="glazing_l2", ceiling=l2, glazing=facade_glazing)
 
 
 
@@ -32,5 +34,7 @@ glazing_L2 = Node(uuid="glazing_L2", ceiling=l2, glazing=facade_glazing)
 nt = Network('1500px', '1500px')
 nt.toggle_physics(True)
 gr = l2.graph.to_nx()
+ggr=json.dumps(l2.graph.toflow())
+print(ggr)
 nt.from_nx(gr)
-nt.write_html("/Users/sofya/PycharmProjects/grid/src/lib/sf.html")
+#nt.write_html("/Users/sofya/PycharmProjects/grid/src/lib/sf.html")

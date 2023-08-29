@@ -1,0 +1,1 @@
+python static_client.py update 76 swdata/pair_contours_mesh.json
