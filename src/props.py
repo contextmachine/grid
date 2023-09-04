@@ -87,7 +87,7 @@ if os.getenv("TEST_DEPLOYMENT") is not None:
     TAGDB = f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:tagdb_test"
 
 else:
-    TAGDB = f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:tagdb"
+    TAGDB = f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:tagdb1"
 props_table = rconn.get(TAGDB)
 
 
