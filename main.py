@@ -11,7 +11,7 @@ import pandas as pd
 from fastapi.openapi.models import Response
 
 dotenv.load_dotenv(dotenv_path=".env")
-reflection = dict(recompute_repr3d=True, mask_index=dict(), cutted_childs=dict())
+reflection = dict(recompute_repr3d=True, mask_index=dict(), cutted_childs=dict(),tris_rg=dict())
 from src.props import TAGDB
 from copy import deepcopy
 from fastapi import FastAPI, UploadFile
@@ -299,6 +299,7 @@ if _dt is not None:
     solve_kd(json.loads(_dt))
 
 def on_shutdown():
+    print("Grace Shutdown")
     return rconn.set(TAGDB, pickle.dumps(props_table))
 
 
@@ -420,12 +421,79 @@ def pt():
         pickle.dump(props_table, f)
     return FileResponse(path="props_table.pkl", filename="props_table.pkl")
 
+
+def rule(dct):
+    def wrap(obj):
+        if len(dct)==0:
+            return False
+        return all([obj[k] == dct[k] for k in dct.keys()])
+
+    return wrap
+
+
+@serve.app.post("/where")
+def where_query(data: dict):
+    rul = rule(data)
+    return [dict(list(_i) + [("name", _i.index)]) for _i in list(filter(rul, reflection["tris"]))]
+
+class TrisRGroup(RootGroup):
+
+
+    @property
+    def rule_data(self):
+        return reflection["tris_rg"].get(self.uuid, dict())
+
+    @rule_data.setter
+    def rule_data(self,data):
+        reflection["tris_rg"][self.uuid] =data
+        self.controls=data
+
+    @property
+    def children_uuids(self):
+        return set(itm.index for itm in filter(self.filter_children, reflection["tris"]))
+
+    def filter_children(self, x):
+        if len(self.rule_data) == 0:
+            return False
+        return all([x[k] == self.rule_data[k] for k in self.rule_data])
+
+
+@serve.app.post("/where/{uid}")
+async def where_obj(uid:str, data: dict):
+    adict.get(uid).rule_data=data
+
+    return data
+
+
+@serve.app.get("/where/{uid}")
+async def where_objget(uid: str):
+
+
+    return adict.get(uid).rule_data
+
+
+@serve.app.get("/dump/tagdb")
+def dump_tagdb():
+    on_shutdown()
+    return TAGDB
+
+@serve.app.get("/where/table")
+def where_table(data: dict):
+    rul = rule(data)
+    tab = pd.DataFrame([dict(list(_i) + [("name", _i.index)]) for _i in list(filter(rul, reflection["tris"]))])
+    tab.to_csv("table.csv")
+    return FileResponse("table.csv", filename="table.csv", media_type="application/csv")
+
 if os.getenv("TEST_DEPLOYMENT") is None:
+    aapp = FastAPI(on_shutdown=[on_shutdown])
+elif os.getenv('DUMP_TAGDB') =="1":
     aapp = FastAPI(on_shutdown=[on_shutdown])
 else:
     aapp = FastAPI()
 aapp.mount(os.getenv("MMCORE_APPPREFIX"), serve.app)
 
-
+ttg = TrisRGroup(uuid="query_object", name="query_object", _endpoint="where/query_object", rule_data={"cut": 0})
+ttg.scale(0.001,0.001,0.001)
 if __name__ == "__main__":
+
     uvicorn.run("main:aapp", host='0.0.0.0', port=7711)

@@ -210,14 +210,14 @@ Content-Type: application/json
 ###
 GRAPHQL http://localhost:7711/cxm/api/v2/mfb_sw_l2/graphql
 
-{mfb_sw_l2_panels_masked_cut}
+{query_object}
 ###
 GRAPHQL http://localhost:7711/graphql
 
 {mfb_sw_l2_panels_masked_cut}
 
 ###
-GET http://localhost:7711/cxm/api/v2/mfb_sw_l2/fetch/mfb_sw_l2_panels_masked_cut
+GET http://localhost:7711/cxm/api/v2/mfb_sw_l2/fetch/query_object
 ###
 GET https://viewer.contextmachine.online/cxm/api/v2/mfb_sw_l2/fetch/mfb_sw_l2_panels_masked_cut
 
