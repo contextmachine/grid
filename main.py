@@ -193,6 +193,11 @@ def solve_triangles():
             props_table[uuid]["cut_mask"] = cut_mask[i]
             props_table[uuid]["projmask"] = cut_mask[i]
 
+            # ADD PAIRS!
+            props_table[uuid]["pair_name"] = uuid[13:-2]
+            props_table[uuid]["pair_index"] = uuid[-1]
+            # ADD PAIRS!
+
             if uuid not in reflection["tri_items"].keys():
 
                 if len(ppp) > 1:
@@ -211,7 +216,6 @@ def solve_triangles():
 
 
                         new_props = deepcopy(props_table[uuid])
-                        #print(new_props)
                         d=dict(new_props)
                         if "mount" in d.keys():
                             mnt=d.pop("mount")
@@ -222,11 +226,14 @@ def solve_triangles():
                         try:
                             props_table[uuid + f"_{k + 1}"].set(d)
                             props_table.columns["mount"][uuid + f"_{k + 1}"]=mnt
-                            #print('got it 1')
+                            props_table.columns["pair_name"][uuid + f"_{k + 1}"] = uuid[13:-2]
+                            props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
+
                         except:
                             props_table[uuid + f"_{k + 1}"] = d
                             props_table.columns["mount"][uuid + f"_{k + 1}"] = mnt
-                            #print('got it 2')
+                            props_table.columns["pair_name"][uuid + f"_{k + 1}"] = uuid[13:-2]
+                            props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
 
                         trii = Triangle(*pts)
                         trii.triangulate()
@@ -242,7 +249,7 @@ def solve_triangles():
 
                         pan.__setattr__(f"part{k + 1}", panel)
 
-                    reflection["tri_items"][uuid ] = pan
+                    reflection["tri_items"][uuid] = pan
                 else:
                     #mask_db.index_map.append(i)
                     #prt = Part(i, mask_db)
@@ -341,15 +348,10 @@ async def mask_handle(name, data: dict):
 
 @serve.app.post("/masks/v2/add/{uuid}/{name}")
 async def mask_handle_v2(uuid:str, name:str, data: dict):
-    #mask_db.cols[name]=Column(reference=data['reference'], dtype=int)
-    #mask_db.cols[name].set_data(dict(enumerate(data["masks"])))
+
     if 'masks' in data.keys():
         props_table.set_column(name, dict(zip(props_table.get_column("tag").keys(), data['masks'])))
     grp=masked_group1(uuid,name)
-    #props_table.set_column(name, dict(zip(props_table.get_column("tag").keys(), data['masks'])))
-    #mask_db.cols[name]=Column(**data)
-    #rmask_db.dumps()
-
     return grp.root()
 
 @serve.app.post("/triangle_handle/{uid}")
