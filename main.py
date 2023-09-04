@@ -1,19 +1,17 @@
 import gzip
 import json
 import pickle
-import dataclasses
-import click
+
 import uvicorn
 import os
 import dotenv
 import numpy as np
 import pandas as pd
-from fastapi.openapi.models import Response
 
 dotenv.load_dotenv(dotenv_path=".env")
 reflection = dict(recompute_repr3d=True, mask_index=dict(), cutted_childs=dict(),tris_rg=dict())
 from src.props import TAGDB
-from copy import deepcopy
+
 from fastapi import FastAPI, UploadFile
 from starlette.responses import FileResponse, HTMLResponse
 from scipy.spatial import KDTree
@@ -22,15 +20,14 @@ from src.cxm_props import BLOCK, PROJECT, ZONE
 
 from mmcore.geom.materials import ColorRGB
 from mmcore.base import A, AGroup, AMesh
-from mmcore.base.components import Component
+
 from mmcore.base.sharedstate import serve
 from mmcore.base.registry import adict, idict
 from mmcore.geom.shapes.base import Triangle
 from mmcore.geom.point import GeometryBuffer, BUFFERS
-from mmcore.services.redis.connect import get_cloud_connection
-from mmcore.services.redis import sets
+
 from mmcore.base import ALine, A, APoints, AGroup
-from mmcore.base.tags import TagDB
+
 print(TAGDB)
 from src.pairs import gen_pair_stats,gen_stats_to_pairs,solve_pairs_stats
 from src.parts import Column, Db, Part, RedisBind
@@ -83,32 +80,15 @@ class Buf(GeometryBuffer):
     def append(self, item):
         return super().add_item(item)
 
-
-with open("swdata/masks/cut.json", "r") as msk:
-    projmask =    cut= json.load(msk)
-    rmasks["cut_mask"] =cut
-    rmasks['projmask'] =cut
-    cut_mask=rmasks["cut_mask"]
-    #projmask = projmask[1930:1955]
-    #mask_db.cols['cut_mask'].set_data(dict(enumerate(cut)))
-    #mask_db.cols['projmask'].set_data(dict(enumerate(cut)))
-
-    #projmask = projmask[1930:1955]
-
-with open("swdata/SW_triangles_cutted.gz", "rb") as msk:
-    tri = json.loads(gzip.decompress(msk.read()).decode())
-    #tri = tri[1930:1955]
+build=json.loads(gzip.decompress(rconn.get(f"{PROJECT}:{BLOCK}:{ZONE}:build")).decode())
 
 
-with open("swdata/SW_centers.json", "r") as msk:
-    tri_cen = json.load(msk)
-    #tri_cen = tri_cen[1930:1955]
 
-with open("swdata/SW_names.json", "r") as msk:
-    tri_names = json.load(msk)
-
-    #tri_names = tri_names[1930:1955]
-
+cut, tri,     tri_cen ,tri_names= build['cut'],build['cutted_tri'],build['centers'], build['names']
+projmask =    cut
+rmasks["cut_mask"] =cut
+rmasks['projmask'] =cut
+cut_mask=rmasks["cut_mask"]
 
 
 Triangle.table = GeometryBuffer(uuid='default')
@@ -495,5 +475,4 @@ aapp.mount(os.getenv("MMCORE_APPPREFIX"), serve.app)
 ttg = TrisRGroup(uuid="query_object", name="query_object", _endpoint="where/query_object", rule_data={"cut": 0})
 ttg.scale(0.001,0.001,0.001)
 if __name__ == "__main__":
-
     uvicorn.run("main:aapp", host='0.0.0.0', port=7711)
