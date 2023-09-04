@@ -8,10 +8,10 @@ import os
 import dotenv
 import numpy as np
 import pandas as pd
-
+from fastapi.openapi.models import Response
 
 dotenv.load_dotenv(dotenv_path=".env")
-reflection = dict(recompute_repr3d=True, mask_index=dict())
+reflection = dict(recompute_repr3d=True, mask_index=dict(), cutted_childs=dict())
 from src.props import TAGDB
 from copy import deepcopy
 from fastapi import FastAPI, UploadFile
@@ -39,6 +39,7 @@ from src.parts import Column, Db, Part, RedisBind
 # structure, the parameters will be updated recursively and only the part of the graph affected by the change
 # will be recalculated.
 reflection["tri_items"] = dict()
+reflection["tris"] = list()
 A.__gui_controls__.config.address = os.getenv("MMCORE_ADDRESS")
 A.__gui_controls__.config.api_prefix = os.getenv("MMCORE_APPPREFIX")
 from src.props import rconn, cols, rmasks
@@ -99,10 +100,6 @@ with open("swdata/SW_triangles_cutted.gz", "rb") as msk:
     #tri = tri[1930:1955]
 
 
-with open("swdata/SW_triangles.gz", "rb") as msk:
-    tri_no_cut = json.loads(gzip.decompress(msk.read()).decode())
-    #tri_no_cut=tri_no_cut[1930:1955]
-
 with open("swdata/SW_centers.json", "r") as msk:
     tri_cen = json.load(msk)
     #tri_cen = tri_cen[1930:1955]
@@ -119,7 +116,7 @@ Triangle.table = GeometryBuffer(uuid='default')
 itm2 = []
 
 arr = np.asarray(tri_cen).reshape((len(tri_cen), 3))
-arr[..., 2] *= 0
+#arr[..., 2] *= 0
 
 
 def check_mask(mask):
@@ -137,7 +134,7 @@ def solve_kd(new_data):
     reflection['data'] = dt
 
     vg = np.array(reflection["data_pts"])
-    vg[..., 2] *= 0
+    #vg[..., 2] *= 0
 
     kd = KDTree(vg)
     reflection["kd"] = kd
@@ -148,6 +145,7 @@ def solve_kd(new_data):
 
 
 class PanelMesh(AMesh):
+
     @property
     def properties(self):
         return props_table[self.uuid]
@@ -167,6 +165,7 @@ class CompoundPanel(A):
 
 
 def solve_triangles():
+    reflection["tris"]=[]
     for i, j in enumerate(reflection['ix']):
         try:
             reflection["data"][j]
@@ -186,7 +185,7 @@ def solve_triangles():
 
             reflection["mask_index"][uuid]=i
 
-            props_table[uuid]["tag"] = tag
+            #props_table[uuid]["tag"] = tag
 
             props_table[uuid] = reflection['data'][j]
             props_table[uuid]["cut"] = cut_mask[i]
@@ -207,7 +206,7 @@ def solve_triangles():
                                         )
                     # pan.controls = props_table[uuid]
                     pan._endpoint = "triangle_handle/" + uuid
-
+                    #reflection["cutted_childs"][uuid]=set()
                     for k, pts in enumerate(ppp):
                         #mask_db.index_map.append(i)
                         #prt=Part(i+k, mask_db)
@@ -215,38 +214,38 @@ def solve_triangles():
 
 
 
-                        new_props = deepcopy(props_table[uuid])
-                        d=dict(new_props)
-                        if "mount" in d.keys():
-                            mnt=d.pop("mount")
-                        else:
-                            props_table.add_column("mount", default=0,column_type=int)
-                            mnt=0
+                        new_props = dict(props_table[uuid])
+                        #d=dict(new_props)
+                        #new_props["name"]=uuid + f"_{k + 1}"
 
+
+                        #props_table.add_column("mount", default=0,column_type=int)
+                        #mnt=0
+                        #reflection["cutted_childs"][uuid].add(uuid + f"_{k + 1}")
                         try:
-                            props_table[uuid + f"_{k + 1}"].set(d)
-                            props_table.columns["mount"][uuid + f"_{k + 1}"]=mnt
+                            props_table[uuid + f"_{k + 1}"].set(new_props)
+                            #props_table.columns["mount"][uuid + f"_{k + 1}"]=mnt
                             props_table.columns["pair_name"][uuid + f"_{k + 1}"] = uuid[13:-2]
                             props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
 
                         except:
-                            props_table[uuid + f"_{k + 1}"] = d
-                            props_table.columns["mount"][uuid + f"_{k + 1}"] = mnt
+                            props_table[uuid + f"_{k + 1}"].set(new_props)
+                            #props_table.columns["mount"][uuid + f"_{k + 1}"] = mnt
                             props_table.columns["pair_name"][uuid + f"_{k + 1}"] = uuid[13:-2]
                             props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
 
                         trii = Triangle(*pts)
-                        trii.triangulate()
+                        #trii.triangulate()
                         panel = trii.mesh_data.to_mesh(cls=PanelMesh,
                                                        uuid=uuid + f"_{k + 1}",
                                                        name=uuid + f"_{k + 1}",
                                                        color=ColorRGB(*cols[tag]).decimal,
                                                        _endpoint="triangle_handle/" + uuid,
                                                        )
-
+                        #props_table["name"][uuid + f"_{k + 1}"] = uuid + f"_{k + 1}"
                         panel.controls = props_table[uuid + f"_{k + 1}"]
                         panel._endpoint = "triangle_handle/" + uuid + f"_{k + 1}"
-
+                        reflection["tris"].append(props_table[uuid + f"_{k + 1}"])
                         pan.__setattr__(f"part{k + 1}", panel)
 
                     reflection["tri_items"][uuid] = pan
@@ -255,7 +254,7 @@ def solve_triangles():
                     #prt = Part(i, mask_db)
                     #prt.set('parent_uuid', uuid)
                     #prt.set('self_uuid', uuid)
-
+                    #props_table["name"][uuid] = uuid
                     trii = Triangle(*ppp[0])
                     trii.triangulate()
                     pan = trii.mesh_data.to_mesh(cls=PanelMesh,
@@ -267,6 +266,9 @@ def solve_triangles():
                     pan.controls = props_table[uuid]
                     pan._endpoint = "triangle_handle/" + uuid
                     reflection["tri_items"][uuid] = pan
+
+                    reflection["tris"].append(props_table[uuid])
+
 
 
 def masked_group1(owner_uuid, name,mode=True):
@@ -318,17 +320,17 @@ grp.scale(0.001, 0.001, 0.001)
 
 pgrp=MaskedRootGroup(uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut",
                 name=f"{BLOCK} {ZONE}".upper(),
-                mask_name="cut",
+
                 owner_uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels")
 
 pgrp.scale(0.001, 0.001, 0.001)
-solve_pairs_stats(reflection=reflection,props=props_table)
+#solve_pairs_stats(reflection=reflection,props=props_table)
 print(pgrp.uuid)
-
+pgrp.mask_name="cut"
 
 @serve.app.get("/table")
-async def stats1():
-    tab = pd.DataFrame(props_table.columns)
+def stats1():
+    tab = pd.DataFrame([dict(list(i)+[("name", i.index)]) for i in reflection["tris"]])
     tab.to_csv("table.csv")
     return FileResponse("table.csv", filename="table.csv", media_type="application/csv")
 
@@ -406,12 +408,17 @@ if os.getenv("TEST_DEPLOYMENT") is None:
         return HTMLResponse(content=content)
 
 @serve.app.get("/stats")
-def stats():
-    return list(gen_stats_to_pairs(props_table=props_table))
+async def stats():
+    return [dict(list(i)+[("name", i.index)]) for i in reflection["tris"]]
 @serve.app.get("/stats/pairs")
-def stats_pairs():
+async def stats_pairs():
 
     return reflection["pairs_stats"]
+@serve.app.get("/props_table")
+def pt():
+    with open("props_table.pkl", 'wb') as f:
+        pickle.dump(props_table, f)
+    return FileResponse(path="props_table.pkl", filename="props_table.pkl")
 
 if os.getenv("TEST_DEPLOYMENT") is None:
     aapp = FastAPI(on_shutdown=[on_shutdown])

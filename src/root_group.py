@@ -18,10 +18,12 @@ def date():
 class RootGroup(AGroup):
 
     def props_update(self, uuids: list[str], props: dict):
+        global reflection
         if "mount" in props.keys():
             if props.get("mount"):
                 props["mount_date"] = date()
         for uuid in uuids:
+
             props_table[uuid].set(props)
 
         return True
@@ -39,6 +41,7 @@ class MaskedRootGroup(RootGroup):
 
     _mask_name = None
     _owner_uuid=''
+
     @property
     def owner_uuid(self):
         return self._owner_uuid
