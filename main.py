@@ -10,7 +10,6 @@ import numpy as np
 import pandas as pd
 
 
-
 dotenv.load_dotenv(dotenv_path=".env")
 reflection = dict(recompute_repr3d=True, mask_index=dict())
 from src.props import TAGDB
@@ -19,6 +18,7 @@ from fastapi import FastAPI, UploadFile
 from starlette.responses import FileResponse, HTMLResponse
 from scipy.spatial import KDTree
 
+from src.cxm_props import BLOCK, PROJECT, ZONE
 
 from mmcore.geom.materials import ColorRGB
 from mmcore.base import A, AGroup, AMesh
@@ -38,16 +38,13 @@ from src.parts import Column, Db, Part, RedisBind
 # This Api provides an extremely flexible way of updating data. You can pass any part of the parameter dictionary
 # structure, the parameters will be updated recursively and only the part of the graph affected by the change
 # will be recalculated.
-
+reflection["tri_items"] = dict()
 A.__gui_controls__.config.address = os.getenv("MMCORE_ADDRESS")
 A.__gui_controls__.config.api_prefix = os.getenv("MMCORE_APPPREFIX")
+from src.props import rconn, cols, rmasks
+from src.root_group import RootGroup, props_table, MaskedRootGroup
 
-from src.root_group import RootGroup, props_table
-rconn = get_cloud_connection()
-sets.rconn = rconn
-rmasks = sets.Hdict("mfb:sw:l1:masks")
-cols = dict(sets.Hdict("mfb:sw:l2:colors"))
-reflection["tri_items"] = dict()
+
 #props_table = TagDB("mfb_sw_l2_panels")
 
 
@@ -285,7 +282,7 @@ def masked_group1(owner_uuid, name,mode=True):
 
 
 
-_dt = rconn.get(f"api:mmcore:runtime:mfb:sw:l2:datapoints")
+_dt = rconn.get(f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:datapoints")
 
 if _dt is not None:
     if isinstance(_dt, bytes):
@@ -299,19 +296,25 @@ def on_shutdown():
 
 solve_triangles()
 
-grp = RootGroup(uuid="mfb_sw_l2_panels", name="SW L2 panels",
-             )
+grp = RootGroup(uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels", name=f"{BLOCK} {ZONE} panels".upper())
 
-idict["mfb_sw_l2_panels"]["__children__"] = set()
+idict[f"{PROJECT}_{BLOCK}_{ZONE}_panels"]["__children__"] = set()
 
 
 for i, uid in enumerate(reflection["tri_items"].keys()):
     print(f'solve {i} {uid}', flush=True, end="\r")
-    idict["mfb_sw_l2_panels"]["__children__"].add(uid)
+    idict[f"{PROJECT}_{BLOCK}_{ZONE}_panels"]["__children__"].add(uid)
 
 
 grp.scale(0.001, 0.001, 0.001)
-pgrp=masked_group1("mfb_sw_l2_panels", "cut")
+
+
+pgrp=MaskedRootGroup(uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut",
+                name=f"{BLOCK} {ZONE}".upper(),
+                mask_name="cut",
+                owner_uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels")
+
+pgrp.scale(0.001, 0.001, 0.001)
 solve_pairs_stats(reflection=reflection,props=props_table)
 print(pgrp.uuid)
 
@@ -363,11 +366,6 @@ async def triangle_handle_get(uid: str):
 
 
 
-@serve.app.get("/triangle_handle/{uid}")
-async def triangle_handle_get(uid: str):
-    return props_table[uid]
-
-
 if os.getenv("TEST_DEPLOYMENT") is None:
     @serve.app.post("/upload_json")
     async def create_upload_file(file: UploadFile):
@@ -375,7 +373,7 @@ if os.getenv("TEST_DEPLOYMENT") is None:
 
             content = await file.read()
 
-            rconn.set(f"api:mmcore:runtime:mfb:sw:l2:datapoints", content.decode())
+            rconn.set(f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:datapoints", content.decode())
             solve_kd(json.loads(content.decode()))
 
             solve_triangles()
@@ -413,8 +411,10 @@ def stats_pairs():
 
     return reflection["pairs_stats"]
 
-
-aapp = FastAPI(on_shutdown=[on_shutdown])
+if os.getenv("TEST_DEPLOYMENT") is None:
+    aapp = FastAPI(on_shutdown=[on_shutdown])
+else:
+    aapp = FastAPI()
 aapp.mount(os.getenv("MMCORE_APPPREFIX"), serve.app)
 
 
