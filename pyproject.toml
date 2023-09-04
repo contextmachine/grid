@@ -9,6 +9,9 @@ packages = [{include = "src"}]
 [tool.poetry.dependencies]
 python = ">=3.9,<3.12"
 mmcore = {git = "https://github.com/contextmachine/mmcore.git"}
+python-multipart="*"
+fastapi={extras=["all"], version="*"}
+httpx="*"
 
 
 
