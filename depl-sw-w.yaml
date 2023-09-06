@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mfb-sw-w
+  labels:
+    app: mfb-sw-w
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mfb-sw-w
+  template:
+    metadata:
+      name: mfb-sw-w
+      labels:
+        app: mfb-sw-w
+    spec:
+      containers:
+
+        - name: mfb-sw-w-container
+          image:  cr.yandex/crpfskvn79g5ht8njq0k/mfb_sw_l2:latest
+          imagePullPolicy: Always
+          env:
+
+          - name: MMCORE_APPPREFIX
+            value: /cxm/api/v2/mfb_sw_w/
+          - name: MMCORE_ADDRESS
+            value: https://viewer.contextmachine.online
+          - name: REDIS_HOST
+            value: c-c9qr4u1s1u8nfqoisnpc.rw.mdb.yandexcloud.net
+          - name: REDIS_PORT
+            value: "6379"
+          - name: REDIS_PASSWORD
+            value: robotrobot
+          - name: DUMP_TAGDB
+            value: "1"
+          - name: CXM_PROJECT
+            value: mfb
+          - name: CXM_BLOCK
+            value: sw
+          - name: CXM_ZONE
+            value: w
+          - name: VERSVERS
+            value: "1"
+      restartPolicy: Always

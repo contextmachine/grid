@@ -1,5 +1,6 @@
 import os
 import pickle
+import uuid
 
 import dotenv
 from mmcore.base.tags import TagDB, __databases__
@@ -118,10 +119,19 @@ class PanelsTagDB(TagDB):
 
 if os.getenv("TEST_DEPLOYMENT") is not None:
     TAGDB = f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:tagdb_test"
-
+    print("TAGDB",  TAGDB )
 else:
-    TAGDB = f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:tagdb1"
-props_table = rconn.get(TAGDB)
+    if os.getenv("DB_NAME") is None:
+        DB_NAME="tagdb_"+uuid.uuid4().hex
+    else:
+        DB_NAME=os.getenv("DB_NAME")
+    print("DB_NAME", DB_NAME)
+    TAGDB = f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:{DB_NAME}"
+    print("TAGDB", TAGDB)
+
+props_table_data=rconn.xrevrange(TAGDB, min='-',max='+',count=1)
+
+
 
 
 
@@ -134,14 +144,27 @@ if os.getenv("RECREATE_TAGDB"):
     props_table.add_column("mount_date", default="", column_type=str)
     props_table.add_column("tag", default="", column_type=str)
     props_table.columns['tag'] = SolvedTagColumn(props_table.uuid)
-elif props_table is None:
+elif props_table_data is None:
+    print("Tag DB recreate because props_table is None ...")
     props_table = PanelsTagDB(f"{PROJECT}_{BLOCK}_{ZONE}_panels")
     props_table.add_column("mount", default=False, column_type=bool)
 
     props_table.add_column("mount_date", default="", column_type=str)
     props_table.add_column("tag", default="", column_type=str)
     props_table.columns['tag'] = SolvedTagColumn(props_table.uuid)
+
+
 else:
-    props_table = pickle.loads(props_table)
+    try:
+        props_table = pickle.loads(props_table_data)
+    except Exception as err:
+        print(f"WARN {err}")
+        props_table = PanelsTagDB(f"{PROJECT}_{BLOCK}_{ZONE}_panels")
+        props_table.add_column("mount", default=False, column_type=bool)
+
+        props_table.add_column("mount_date", default="", column_type=str)
+        props_table.add_column("tag", default="", column_type=str)
+        props_table.columns['tag'] = SolvedTagColumn(props_table.uuid)
+
 #
 print(props_table)

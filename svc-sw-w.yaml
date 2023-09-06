@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mfb-sw-w
+spec:
+  selector:
+    app: mfb-sw-w
+  ports:
+    - name: http
+      port: 7711
+      protocol: TCP
+      targetPort: 7711
+  sessionAffinity: None
+  type: ClusterIP
+  
