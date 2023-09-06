@@ -212,12 +212,12 @@ GRAPHQL http://localhost:7711/cxm/api/v2/mfb_sw_l2/graphql
 
 {query_object}
 ###
-GRAPHQL http://localhost:7711/graphql
+GRAPHQL http://localhost:7711/cxm/api/v2/mfb_sw_l2/graphql
 
 {mfb_sw_l2_panels_masked_cut}
 
 ###
-GET http://localhost:7711/cxm/api/v2/mfb_sw_l2/fetch/query_object
+GET http://localhost:7711/cxm/api/v2/mfb_sw_l2/fetch/mfb_sw_l2_panels_masked_cut
 ###
 GET https://viewer.contextmachine.online/cxm/api/v2/mfb_sw_l2/fetch/mfb_sw_l2_panels_masked_cut
 

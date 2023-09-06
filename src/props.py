@@ -3,7 +3,9 @@ import pickle
 
 import dotenv
 from mmcore.base.tags import TagDB, __databases__
-
+from mmcore.base.registry import amatdict
+from mmcore.geom.materials import ColorRGB
+from mmcore.base.geom import MeshPhongMaterial
 dotenv.load_dotenv(dotenv_path=".env")
 
 from src.cxm_props import PROJECT, BLOCK, ZONE
@@ -13,8 +15,39 @@ from mmcore.services.redis import sets
 rconn = get_cloud_connection()
 sets.rconn = rconn
 rmasks = sets.Hdict(f"{PROJECT}:{BLOCK}:{ZONE}:masks")
-cols = dict(sets.Hdict(f"{PROJECT}:{BLOCK}:{ZONE}:colors"))
+cols = dict(sets.Hdict(f"{PROJECT}:colors"))
 
+class ColorMap(dict):
+    def __init__(self,*args,hset_key=f"{PROJECT}:colors", **kwargs):
+        self._hset = sets.Hdict(hset_key)
+        super().__init__( *args,**kwargs)
+        self._store=dict()
+        self.update(dict(self._hset))
+
+
+    def __setitem__(self, k, item):
+        if k not in self.keys():
+            self._hset[k]=item
+            #mat=MeshPhongMaterial(color=ColorRGB(*item).decimal)
+
+            self._store[k] = self.solve_item(item)
+        super().__setitem__(k,item)
+
+    def __getitem__(self, item):
+        if item not in self._store:
+            self._store[item] = self.solve_item(self._hset[item])
+        return self._store[item]
+
+
+    def solve_item(self,item):
+        col = ColorRGB(*item).decimal
+        mat = f"{col}meshphongmaterial"
+        if mat not in amatdict:
+            amatdict[mat] = MeshPhongMaterial(color=ColorRGB(*item).decimal)
+
+        return mat
+
+colormap=ColorMap()
 class ColumnType(dict):
     def __init__(self, ownid=None, *args, **kwargs):
         super().__init__(*args, **kwargs)

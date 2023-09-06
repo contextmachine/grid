@@ -10,7 +10,7 @@ import pandas as pd
 
 dotenv.load_dotenv(dotenv_path=".env")
 reflection = dict(recompute_repr3d=True, mask_index=dict(), cutted_childs=dict(),tris_rg=dict())
-from src.props import TAGDB
+from src.props import TAGDB,colormap
 
 from fastapi import FastAPI, UploadFile
 from starlette.responses import FileResponse, HTMLResponse
@@ -39,7 +39,7 @@ reflection["tri_items"] = dict()
 reflection["tris"] = list()
 A.__gui_controls__.config.address = os.getenv("MMCORE_ADDRESS")
 A.__gui_controls__.config.api_prefix = os.getenv("MMCORE_APPPREFIX")
-from src.props import rconn, cols, rmasks
+from src.props import rconn, cols, rmasks, ColorMap
 from src.root_group import RootGroup, props_table, MaskedRootGroup
 
 
@@ -79,18 +79,22 @@ def prettify(dt, buff=None):
 class Buf(GeometryBuffer):
     def append(self, item):
         return super().add_item(item)
+def set_static_build_data(key, data, conn):
+    return conn.set( key, gzip.decompress(json.dumps(data).encode()))
+def get_static_build_data(key,conn):
+    return json.loads(gzip.decompress(conn.get(key)).decode())
 
 build=json.loads(gzip.decompress(rconn.get(f"{PROJECT}:{BLOCK}:{ZONE}:build")).decode())
 
 
 
-cut, tri,     tri_cen ,tri_names= build['cut'],build['cutted_tri'],build['centers'], build['names']
+cut, tri,  tri_cen ,tri_names= build['cut'],build['cutted_tri'],build['centers'], build['names']
 projmask =    cut
 rmasks["cut_mask"] =cut
 rmasks['projmask'] =cut
 cut_mask=rmasks["cut_mask"]
 
-
+print(cols)
 Triangle.table = GeometryBuffer(uuid='default')
 
 itm2 = []
@@ -134,6 +138,14 @@ class PanelMesh(AMesh):
     def properties(self, props: dict):
         props_table[self.uuid].set(dict(props))
 
+    @property
+    def _material(self):
+        return colormap[props_table[self.uuid]['tag']]
+
+    @_material.setter
+    def _material(self,v):
+        print("ignore set material")
+        pass
 
 class CompoundPanel(A):
     '''@property
@@ -159,7 +171,8 @@ def solve_triangles():
 
 
             uuid = tri_names[i].replace(":", "_")
-
+            splitted_uuid = uuid.split("_")
+            pair_name = splitted_uuid[3] + "_" + splitted_uuid[4]
 
 
 
@@ -173,7 +186,7 @@ def solve_triangles():
             props_table[uuid]["projmask"] = cut_mask[i]
 
             # ADD PAIRS!
-            props_table[uuid]["pair_name"] = uuid[13:-2]
+            props_table[uuid]["pair_name"] =  pair_name
             props_table[uuid]["pair_index"] = uuid[-1]
             # ADD PAIRS!
 
@@ -205,23 +218,21 @@ def solve_triangles():
                         try:
                             props_table[uuid + f"_{k + 1}"].set(new_props)
                             #props_table.columns["mount"][uuid + f"_{k + 1}"]=mnt
-                            props_table.columns["pair_name"][uuid + f"_{k + 1}"] = uuid[13:-2]
+
+                            props_table.columns["pair_name"][uuid + f"_{k + 1}"] =  pair_name
                             props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
 
                         except:
                             props_table[uuid + f"_{k + 1}"].set(new_props)
                             #props_table.columns["mount"][uuid + f"_{k + 1}"] = mnt
-                            props_table.columns["pair_name"][uuid + f"_{k + 1}"] = uuid[13:-2]
+                            props_table.columns["pair_name"][uuid + f"_{k + 1}"] = pair_name
                             props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
 
                         trii = Triangle(*pts)
                         #trii.triangulate()
-                        panel = trii.mesh_data.to_mesh(cls=PanelMesh,
-                                                       uuid=uuid + f"_{k + 1}",
-                                                       name=uuid + f"_{k + 1}",
-                                                       color=ColorRGB(*cols[tag]).decimal,
-                                                       _endpoint="triangle_handle/" + uuid,
-                                                       )
+                        geom=trii.mesh_data.create_buffer()
+                        panel =PanelMesh(uuid=uuid + f"_{k + 1}", name=uuid + f"_{k + 1}", geometry=geom, _endpoint="triangle_handle/" + uuid + f"_{k + 1}")
+
                         #props_table["name"][uuid + f"_{k + 1}"] = uuid + f"_{k + 1}"
                         panel.controls = props_table[uuid + f"_{k + 1}"]
                         panel._endpoint = "triangle_handle/" + uuid + f"_{k + 1}"
@@ -237,12 +248,11 @@ def solve_triangles():
                     #props_table["name"][uuid] = uuid
                     trii = Triangle(*ppp[0])
                     trii.triangulate()
-                    pan = trii.mesh_data.to_mesh(cls=PanelMesh,
-                                                 uuid=uuid,
-                                                 name=uuid,
-                                                 color=ColorRGB(*cols[tag]).decimal,
-                                                 _endpoint="triangle_handle/" + uuid,
-                                                 )
+                    geom = trii.mesh_data.create_buffer()
+                    pan = PanelMesh(uuid=uuid , name=uuid , geometry=geom,
+                                    _endpoint="triangle_handle/" + uuid )
+
+
                     pan.controls = props_table[uuid]
                     pan._endpoint = "triangle_handle/" + uuid
                     reflection["tri_items"][uuid] = pan
