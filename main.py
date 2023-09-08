@@ -10,7 +10,7 @@ import pandas as pd
 
 dotenv.load_dotenv(dotenv_path=".env")
 reflection = dict(recompute_repr3d=True, mask_index=dict(), cutted_childs=dict(),tris_rg=dict())
-from src.props import TAGDB,colormap
+from src.props import TAGDB,colormap, rconn, cols, rmasks, ColorMap
 
 from fastapi import FastAPI, UploadFile
 from starlette.responses import FileResponse, HTMLResponse
@@ -39,7 +39,7 @@ reflection["tri_items"] = dict()
 reflection["tris"] = list()
 A.__gui_controls__.config.address = os.getenv("MMCORE_ADDRESS")
 A.__gui_controls__.config.api_prefix = os.getenv("MMCORE_APPPREFIX")
-from src.props import rconn, cols, rmasks, ColorMap
+
 from src.root_group import RootGroup, props_table, MaskedRootGroup
 
 
@@ -179,11 +179,15 @@ def solve_triangles():
             reflection["mask_index"][uuid]=i
 
             #props_table[uuid]["tag"] = tag
+            for k,v in reflection['data'][j].items():
+                column=props_table.columns[k]
+                if uuid not in column.keys():
+                    column[uuid]=v
 
-            props_table[uuid] = reflection['data'][j]
-            props_table[uuid]["cut"] = cut_mask[i]
-            props_table[uuid]["cut_mask"] = cut_mask[i]
-            props_table[uuid]["projmask"] = cut_mask[i]
+
+            props_table[uuid]["cut"] = cut[i]
+            props_table[uuid]["cut_mask"] = cut[i]
+            props_table[uuid]["projmask"] = cut[i]
 
             # ADD PAIRS!
             props_table[uuid]["pair_name"] =  pair_name
@@ -307,6 +311,7 @@ for i, uid in enumerate(reflection["tri_items"].keys()):
 
 
 grp.scale(0.001, 0.001, 0.001)
+
 
 
 pgrp=MaskedRootGroup(uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut",
