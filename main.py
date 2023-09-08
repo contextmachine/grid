@@ -208,10 +208,13 @@ def solve_triangles():
                         #mask_db.index_map.append(i)
                         #prt=Part(i+k, mask_db)
                         #prt.set('self_uuid', uuid + f"_{k + 1}")
+                        part_uuid=uuid + f"_{k + 1}"
+                        for key, v in reflection['data'][j].items():
+                            column = props_table.columns[key]
+                            if part_uuid not in column.keys():
+                                column[part_uuid] = v
 
-
-
-                        new_props = dict(props_table[uuid])
+                        #new_props = dict(props_table[uuid])
                         #d=dict(new_props)
                         #new_props["name"]=uuid + f"_{k + 1}"
 
@@ -220,14 +223,14 @@ def solve_triangles():
                         #mnt=0
                         #reflection["cutted_childs"][uuid].add(uuid + f"_{k + 1}")
                         try:
-                            props_table[uuid + f"_{k + 1}"].set(new_props)
+                            #props_table[uuid + f"_{k + 1}"].set(new_props)
                             #props_table.columns["mount"][uuid + f"_{k + 1}"]=mnt
 
                             props_table.columns["pair_name"][uuid + f"_{k + 1}"] =  pair_name
                             props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
 
                         except:
-                            props_table[uuid + f"_{k + 1}"].set(new_props)
+                            #props_table[uuid + f"_{k + 1}"].set(new_props)
                             #props_table.columns["mount"][uuid + f"_{k + 1}"] = mnt
                             props_table.columns["pair_name"][uuid + f"_{k + 1}"] = pair_name
                             props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
@@ -414,7 +417,7 @@ async def stats_pairs():
 def pt():
     with open("props_table.pkl", 'wb') as f:
         pickle.dump(props_table, f)
-    return FileResponse(path="props_table.pkl", filename="props_table.pkl")
+    return FileResponse(path=f"props_table.pkl", filename=f"props_table_{PROJECT}_{BLOCK}_{ZONE}.pkl")
 
 
 def rule(dct):
