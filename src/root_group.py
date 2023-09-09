@@ -1,7 +1,7 @@
 import datetime
 
 from mmcore.base import AGroup, adict, idict
-from src.props import props_table
+from src.props import props_table, colormap
 from mmcore.base.registry import adict, idict
 
 
@@ -15,6 +15,7 @@ def date():
 
     return f'{y}:{m}:{d}'
 
+
 class RootGroup(AGroup):
 
     def props_update(self, uuids: list[str], props: dict):
@@ -23,10 +24,13 @@ class RootGroup(AGroup):
             if props.get("mount"):
                 props["mount_date"] = date()
         for uuid in uuids:
-
             props_table[uuid].set(props)
 
         return True
+
+    def root(self, shapes=None):
+        colormap.reload()
+        return super().root(shapes=shapes)
 
     @property
     def children_uuids(self):
@@ -38,9 +42,8 @@ class RootGroup(AGroup):
 
 
 class MaskedRootGroup(RootGroup):
-
     _mask_name = None
-    _owner_uuid=''
+    _owner_uuid = ''
 
     @property
     def owner_uuid(self):
@@ -48,11 +51,12 @@ class MaskedRootGroup(RootGroup):
 
     @owner_uuid.setter
     def owner_uuid(self, v):
-        self._owner_uuid=v
+        self._owner_uuid = v
 
     @property
     def owner(self):
         return adict.get(self._owner_uuid)
+
     @property
     def mask_table(self):
         return props_table
@@ -64,8 +68,6 @@ class MaskedRootGroup(RootGroup):
     @mask_name.setter
     def mask_name(self, v):
         self._mask_name = v
-
-
 
     @property
     def children_uuids(self):
