@@ -317,7 +317,7 @@ pgrp = MaskedRootGroup(uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut",
                        name=f"{BLOCK} {ZONE}".upper(),
 
                        owner_uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels")
-
+#pgrp.recompute_mask()
 pgrp.scale(0.001, 0.001, 0.001)
 # solve_pairs_stats(reflection=reflection,props=props_table)
 print(pgrp.uuid)

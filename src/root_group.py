@@ -20,16 +20,19 @@ class RootGroup(AGroup):
 
     def props_update(self, uuids: list[str], props: dict):
         global reflection
+
+
         if "mount" in props.keys():
             if props.get("mount"):
                 props["mount_date"] = date()
+
         for uuid in uuids:
             props_table[uuid].set(props)
 
         return True
 
     def root(self, shapes=None):
-        colormap.reload()
+        #colormap.reload()
         return super().root(shapes=shapes)
 
     @property
@@ -44,7 +47,17 @@ class RootGroup(AGroup):
 class MaskedRootGroup(RootGroup):
     _mask_name = None
     _owner_uuid = ''
+    _children_uuids=None
 
+    def props_update(self, uuids: list[str], props: dict):
+        recompute_mask = False
+        if self.mask_name in props.keys():
+            recompute_mask=True
+
+        ans=super().props_update(uuids, props)
+        if recompute_mask:
+            self.recompute_mask()
+        return ans
     @property
     def owner_uuid(self):
         return self._owner_uuid
@@ -68,10 +81,14 @@ class MaskedRootGroup(RootGroup):
     @mask_name.setter
     def mask_name(self, v):
         self._mask_name = v
-
+        self.recompute_mask()
+    def recompute_mask(self):
+        self._children_uuids=list(filter(self.filter_children, idict[self.owner_uuid]["__children__"]))
     @property
     def children_uuids(self):
-        return list(filter(self.filter_children, idict[self.owner_uuid]["__children__"]))
+        if self._children_uuids is None:
+            self.recompute_mask()
+        return self._children_uuids
 
     def filter_children(self, x):
         return self.mask_table[x][self.mask_name] <= 1
