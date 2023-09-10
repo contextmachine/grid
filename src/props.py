@@ -10,7 +10,7 @@ from mmcore.base.geom import MeshPhongMaterial
 
 dotenv.load_dotenv(dotenv_path=".env")
 
-from src.cxm_props import PROJECT, BLOCK, ZONE
+from src.cxm_props import PROJECT, BLOCK, ZONE, DB_NAME
 from mmcore.services.redis.connect import get_cloud_connection
 from mmcore.services.redis import sets
 
@@ -133,10 +133,10 @@ class PanelsTagDB(TagDB):
 
 
 if os.getenv("TEST_DEPLOYMENT") is not None:
-    TAGDB = f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:tagdb_test"
+    TAGDB = f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:{DB_NAME}_test"
 
 else:
-    TAGDB = f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:tagdb2"
+    TAGDB = f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:{DB_NAME}"
 props_table = rconn.get(TAGDB)
 
 if os.getenv("RECREATE_TAGDB"):
