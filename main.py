@@ -4,11 +4,15 @@ import json
 import pickle
 from collections import Counter
 
+import requests
+import shapely
 import uvicorn
 import os
 import dotenv
 import numpy as np
 import pandas as pd
+from earcut import earcut
+from mmcore.base.geom import MeshData
 
 dotenv.load_dotenv(dotenv_path=".env")
 reflection = dict(recompute_repr3d=True, mask_index=dict(), cutted_childs=dict(), tris_rg=dict())
@@ -27,8 +31,9 @@ from mmcore.base.sharedstate import serve
 from mmcore.base.registry import adict, idict
 from mmcore.geom.shapes.base import Triangle
 from mmcore.geom.point import GeometryBuffer, BUFFERS
-
+from mmcore.geom.parametric import algorithms
 from mmcore.base import ALine, A, APoints, AGroup
+
 
 print(TAGDB)
 from src.pairs import gen_pair_stats, gen_stats_to_pairs, solve_pairs_stats
@@ -77,7 +82,13 @@ def prettify(dt, buff=None):
             "zone": zone
         }
 
+servreq={
+    "w":["w1",'w2','w3','w4'],
+    'l2':['l2']
+}[ZONE]
 
+class App:
+    ...
 class Buf(GeometryBuffer):
     def append(self, item):
         return super().add_item(item)
@@ -90,17 +101,20 @@ def set_static_build_data(key, data, conn):
 def get_static_build_data(key, conn):
     return json.loads(gzip.decompress(conn.get(key)).decode())
 
+#build = json.loads(gzip.decompress(rconn.get(f"{PROJECT}:{BLOCK}:{ZONE}:build")).decode())
+#
+#cut, tri, tri_cen, tri_names = build['cut'], build['cutted_tri'], build['centers'], build['names']
+CONTOUR_SERVER_URL=f'{os.getenv("CONTOUR_SERVER_URL")}/contours-merged'
+build = requests.post(CONTOUR_SERVER_URL,json=dict(names=servreq)).json()
 
-build = json.loads(gzip.decompress(rconn.get(f"{PROJECT}:{BLOCK}:{ZONE}:build")).decode())
-
-cut, tri, tri_cen, tri_names = build['cut'], build['cutted_tri'], build['centers'], build['names']
+cut, tri, tri_cen, tri_names = build['mask'], build['shapes'], build['centers'], build['names']
 projmask = cut
 rmasks["cut_mask"] = cut
 rmasks['projmask'] = cut
 cut_mask = rmasks["cut_mask"]
 
 print(cols)
-Triangle.table = GeometryBuffer(uuid='default')
+
 
 itm2 = []
 
@@ -163,7 +177,8 @@ class CompoundPanel(AGroup):
         props_table[self.uuid].set(dict(props))'''
 
 
-def solve_triangles():
+def solve_triangles(triangles, names, colors, mask):
+    reflection["tri_items"] = dict()
     reflection["tris"] = []
     for i, j in enumerate(reflection['ix']):
         try:
@@ -172,104 +187,125 @@ def solve_triangles():
             # print(False)
             j = j - 1
         tag = f'{reflection["data"][j]["arch_type"]}-{reflection["data"][j]["eng_type"]}'
-        if tag not in cols:
-            cols[tag] = np.random.randint(30, 230, 3).tolist()
-        for ppp in tri[i]:
+        if tag not in colors:
+            colors[tag] = np.random.randint(30, 230, 3).tolist()
+        ppp =triangles[i]
 
-            uuid = tri_names[i].replace(":", "_")
-            splitted_uuid = uuid.split("_")
-            pair_name = splitted_uuid[3] + "_" + splitted_uuid[4]
+        uuid = names[i].replace(":", "_")
+        splitted_uuid = uuid.split("_")
+        pair_name = splitted_uuid[3] + "_" + splitted_uuid[4]
 
-            reflection["mask_index"][uuid] = i
+        reflection["mask_index"][uuid] = i
 
-            # props_table[uuid]["tag"] = tag
-            for k, v in reflection['data'][j].items():
+        # props_table[uuid]["tag"] = tag
+        for k, v in reflection['data'][j].items():
+            if k in props_table.columns.keys():
                 column = props_table.columns[k]
                 if uuid not in column.keys():
-                    column[uuid] = v
+                    props_table.set_column_item(k, uuid, v)
+            else:
+                props_table.set_column_item(k, uuid, v)
+                #column[uuid] = v
 
-            props_table[uuid]["cut"] = cut[i]
-            props_table[uuid]["cut_mask"] = cut[i]
-            props_table[uuid]["projmask"] = cut[i]
+        props_table[uuid]["cut"] = mask[i]
+        props_table[uuid]["cut_mask"] = mask[i]
+        props_table[uuid]["projmask"] = mask[i]
 
-            # ADD PAIRS!
-            props_table[uuid]["pair_name"] = pair_name
-            props_table[uuid]["pair_index"] = uuid[-1]
-            # ADD PAIRS!
+        # ADD PAIRS!
+        props_table[uuid]["pair_name"] = pair_name
+        props_table[uuid]["pair_index"] = uuid[-1]
+        # ADD PAIRS!
 
-            if uuid not in reflection["tri_items"].keys():
+        if uuid not in reflection["tri_items"].keys():
 
-                if len(ppp) > 1:
+            if len(ppp) > 1:
 
-                    pan = CompoundPanel(uuid=uuid, name=tri_names[i].replace(":", "_"),
-                                        _endpoint="triangle_handle/" + uuid,
-                                        )
-                    # pan.controls = props_table[uuid]
-                    pan._endpoint = "triangle_handle/" + uuid
-                    # reflection["cutted_childs"][uuid]=set()
-                    for k, pts in enumerate(ppp):
-                        # mask_db.index_map.append(i)
-                        # prt=Part(i+k, mask_db)
-                        # prt.set('self_uuid', uuid + f"_{k + 1}")
-                        part_uuid = uuid + f"_{k + 1}"
-                        for key, v in reflection['data'][j].items():
+                pan = CompoundPanel(uuid=uuid, name=uuid,
+                                    _endpoint="triangle_handle/" + uuid,
+                                    )
+                # pan.controls = props_table[uuid]
+                pan._endpoint = "triangle_handle/" + uuid
+                # reflection["cutted_childs"][uuid]=set()
+                for k, pts in enumerate(ppp):
+                    # mask_db.index_map.append(i)
+                    # prt=Part(i+k, mask_db)
+                    # prt.set('self_uuid', uuid + f"_{k + 1}")
+                    part_uuid = uuid + f"_{k + 1}"
+
+                    for key, v in reflection['data'][j].items():
+                        if key in props_table.columns.keys():
                             column = props_table.columns[key]
                             if part_uuid not in column.keys():
-                                column[part_uuid] = v
+                                props_table.set_column_item(key, part_uuid, v)
+                        else:
+                            props_table.set_column_item(key, part_uuid, v)
+                    props_table[part_uuid]['cut']=1
+                    # new_props = dict(props_table[uuid])
+                    # d=dict(new_props)
+                    # new_props["name"]=uuid + f"_{k + 1}"
 
-                        # new_props = dict(props_table[uuid])
-                        # d=dict(new_props)
-                        # new_props["name"]=uuid + f"_{k + 1}"
+                    # props_table.add_column("mount", default=0,column_type=int)
+                    # mnt=0
+                    # reflection["cutted_childs"][uuid].add(uuid + f"_{k + 1}")
+                    try:
+                        # props_table[uuid + f"_{k + 1}"].set(new_props)
+                        # props_table.columns["mount"][uuid + f"_{k + 1}"]=mnt
 
-                        # props_table.add_column("mount", default=0,column_type=int)
-                        # mnt=0
-                        # reflection["cutted_childs"][uuid].add(uuid + f"_{k + 1}")
-                        try:
-                            # props_table[uuid + f"_{k + 1}"].set(new_props)
-                            # props_table.columns["mount"][uuid + f"_{k + 1}"]=mnt
+                        props_table.columns["pair_name"][uuid + f"_{k + 1}"] = pair_name
+                        props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
 
-                            props_table.columns["pair_name"][uuid + f"_{k + 1}"] = pair_name
-                            props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
+                    except:
+                        # props_table[uuid + f"_{k + 1}"].set(new_props)
+                        # props_table.columns["mount"][uuid + f"_{k + 1}"] = mnt
+                        props_table.columns["pair_name"][uuid + f"_{k + 1}"] = pair_name
+                        props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
 
-                        except:
-                            # props_table[uuid + f"_{k + 1}"].set(new_props)
-                            # props_table.columns["mount"][uuid + f"_{k + 1}"] = mnt
-                            props_table.columns["pair_name"][uuid + f"_{k + 1}"] = pair_name
-                            props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
+                    #trii = Triangle(*pts)
 
-                        trii = Triangle(*pts)
-                        # trii.triangulate()
-                        geom = trii.mesh_data.create_buffer()
-                        panel = PanelMesh(uuid=uuid + f"_{k + 1}", name=uuid + f"_{k + 1}", geometry=geom,
-                                          _endpoint="triangle_handle/" + uuid + f"_{k + 1}")
+                    res = earcut.flatten([pts])# trii.triangulate()
+                    _tess = earcut.earcut(res['vertices'], res['holes'], res['dimensions'])
 
-                        # props_table["name"][uuid + f"_{k + 1}"] = uuid + f"_{k + 1}"
-                        panel.controls = props_table[uuid + f"_{k + 1}"]
-                        panel._endpoint = "triangle_handle/" + uuid + f"_{k + 1}"
-                        reflection["tris"].append(props_table[uuid + f"_{k + 1}"])
-                        # pan.__setattr__(f"part{k + 1}", panel)
-                        pan.add(panel)
+                    geom = MeshData(vertices=pts, indices=np.array(_tess, dtype=int).reshape((len(_tess) // 3, 3)).tolist()).create_buffer()
+                    panel = PanelMesh(uuid=uuid + f"_{k + 1}", name=uuid + f"_{k + 1}", geometry=geom,
+                            _endpoint="triangle_handle/" + uuid + f"_{k + 1}")
 
-                    reflection["tri_items"][uuid] = pan
-                else:
-                    # mask_db.index_map.append(i)
-                    # prt = Part(i, mask_db)
-                    # prt.set('parent_uuid', uuid)
-                    # prt.set('self_uuid', uuid)
-                    # props_table["name"][uuid] = uuid
-                    trii = Triangle(*ppp[0])
-                    trii.triangulate()
-                    geom = trii.mesh_data.create_buffer()
-                    pan = PanelMesh(uuid=uuid, name=uuid, geometry=geom,
-                                    _endpoint="triangle_handle/" + uuid)
+                    # props_table["name"][uuid + f"_{k + 1}"] = uuid + f"_{k + 1}"
+                    panel.controls = props_table[uuid + f"_{k + 1}"]
+                    panel._endpoint = "triangle_handle/" + uuid + f"_{k + 1}"
+                    reflection["tris"].append(props_table[uuid + f"_{k + 1}"])
+                    # pan.__setattr__(f"part{k + 1}", panel)
+                    pan.add(panel)
 
-                    pan.controls = props_table[uuid]
-                    pan._endpoint = "triangle_handle/" + uuid
-                    reflection["tri_items"][uuid] = pan
+                    reflection["tri_items"][part_uuid] = panel
+            else:
+                # mask_db.index_map.append(i)
+                # prt = Part(i, mask_db)
+                # prt.set('parent_uuid', uuid)
+                # prt.set('self_uuid', uuid)
+                # props_table["name"][uuid] = uuid
+                res = earcut.flatten(ppp)  # trii.triangulate()
+                _tess = earcut.earcut(res['vertices'], res['holes'], res['dimensions'])
+                #print(ppp)
+                geom = MeshData(vertices=ppp, indices=np.array(_tess, dtype=int).reshape(
+                    (len(_tess) // 3, 3)).tolist()).create_buffer()
 
-                    reflection["tris"].append(props_table[uuid])
+                #trii = Triangle(*ppp[0])
+
+                pan = PanelMesh(uuid=uuid, name=uuid, geometry=geom,
+                                _endpoint="triangle_handle/" + uuid)
+
+                pan.controls = props_table[uuid]
+                pan._endpoint = "triangle_handle/" + uuid
+                reflection["tri_items"][uuid] = pan
+
+                reflection["tris"].append(props_table[uuid])
+
+    if f"{PROJECT}_{BLOCK}_{ZONE}_panels" not in idict.keys():
+        grp = RootGroup(uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels", name=f"{BLOCK} {ZONE} panels".upper())
+        grp.scale(0.001, 0.001, 0.001)
 
 
+    idict[f"{PROJECT}_{BLOCK}_{ZONE}_panels"]["__children__"]=set(reflection['tri_items'].keys())
 def masked_group1(owner_uuid, name, mode=True):
     global mask_db
     uid = f"{owner_uuid}_masked_{name}"
@@ -288,42 +324,30 @@ def masked_group1(owner_uuid, name, mode=True):
     return grp
 
 
-_dt = rconn.get(f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:datapoints")
 
-if _dt is not None:
-    if isinstance(_dt, bytes):
-        _dt = _dt.decode()
-    solve_kd(json.loads(_dt))
 
+def init():
+    _dt = rconn.get(f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:datapoints")
+    if _dt is not None:
+        if isinstance(_dt, bytes):
+            _dt = _dt.decode()
+        solve_kd(json.loads(_dt))
+    solve_triangles(tri, tri_names, cols, cut)
+
+
+    pgrp = MaskedRootGroup(uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut",
+                           name=f"{BLOCK} {ZONE}".upper(),
+
+                           owner_uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels")
+    # pgrp.recompute_mask()
+    pgrp.scale(0.001, 0.001, 0.001)
+    # solve_pairs_stats(reflection=reflection,props=props_table)
+    print(pgrp.uuid)
+    pgrp.mask_name = "cut"
 
 def on_shutdown():
     print("Grace Shutdown")
     return rconn.set(TAGDB, pickle.dumps(props_table))
-
-
-solve_triangles()
-
-grp = RootGroup(uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels", name=f"{BLOCK} {ZONE} panels".upper())
-
-idict[f"{PROJECT}_{BLOCK}_{ZONE}_panels"]["__children__"] = set()
-
-for i, uid in enumerate(reflection["tri_items"].keys()):
-    print(f'solve {i} {uid}', flush=True, end="\r")
-    idict[f"{PROJECT}_{BLOCK}_{ZONE}_panels"]["__children__"].add(uid)
-
-grp.scale(0.001, 0.001, 0.001)
-
-pgrp = MaskedRootGroup(uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut",
-                       name=f"{BLOCK} {ZONE}".upper(),
-
-                       owner_uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels")
-#pgrp.recompute_mask()
-pgrp.scale(0.001, 0.001, 0.001)
-# solve_pairs_stats(reflection=reflection,props=props_table)
-print(pgrp.uuid)
-pgrp.mask_name = "cut"
-
-
 @serve.app.get("/table")
 def stats1():
     tab = pd.DataFrame([dict(list(i) + [("name", i.index)]) for i in reflection["tris"]])
@@ -492,6 +516,11 @@ def dump_tagdb():
     on_shutdown()
     return TAGDB
 
+@serve.app.get("/dupdate_contours")
+def dump_tagdb():
+    on_shutdown()
+    return TAGDB
+
 
 @serve.app.get("/where/table")
 def where_table(data: dict):
@@ -499,6 +528,14 @@ def where_table(data: dict):
     tab = pd.DataFrame([dict(list(_i) + [("name", _i.index)]) for _i in list(filter(rul, reflection["tris"]))])
     tab.to_csv("table.csv")
     return FileResponse("table.csv", filename="table.csv", media_type="application/csv")
+@serve.app.get("/update-contours")
+def upd_cont():
+    build = requests.post(CONTOUR_SERVER_URL, json=dict(names=servreq)).json()
+
+    cut, tri, tri_cen, tri_names = build['mask'], build['shapes'], build['centers'], build['names']
+    solve_triangles(tri, tri_names, cols,cut)
+    adict[f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut"].recompute_mask()
+    return "Ok"
 
 
 if os.getenv("TEST_DEPLOYMENT") is None:
@@ -509,7 +546,8 @@ else:
     aapp = FastAPI()
 aapp.mount(os.getenv("MMCORE_APPPREFIX"), serve.app)
 
-ttg = TrisRGroup(uuid="query_object", name="query_object", _endpoint="where/query_object", rule_data={"cut": 0})
-ttg.scale(0.001, 0.001, 0.001)
+#ttg = TrisRGroup(uuid="query_object", name="query_object", _endpoint="where/query_object", rule_data={"cut": 0})
+#ttg.scale(0.001, 0.001, 0.001)
 if __name__ == "__main__":
+    init()
     uvicorn.run("main:aapp", host='0.0.0.0', port=7711)
