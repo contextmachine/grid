@@ -33,6 +33,8 @@ from mmcore.geom.shapes.base import Triangle
 from mmcore.geom.point import GeometryBuffer, BUFFERS
 from mmcore.geom.parametric import algorithms
 from mmcore.base import ALine, A, APoints, AGroup
+import rich
+rich.print(dict(os.environ))
 
 
 print(TAGDB)

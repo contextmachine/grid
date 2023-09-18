@@ -22,7 +22,7 @@ def migrate_tagdb_names(tgdb, migrate):
         tgdb.columns[column_name] = changed_columns[column_name]
 
 
-def migrate_names(tagdb_path,tagdb_new_path, migrate_json_path):
+def migrate_names(tagdb_path, tagdb_new_path, migrate_json_path):
     with open(migrate_json_path, 'r') as f:
         migrate = json.load(f)
     with open(tagdb_path, 'rb') as fp:
