@@ -14,6 +14,7 @@ rconn = get_cloud_connection()
 
 
 class SvetaJson:
+
     def __init__(self, data):
         super().__init__()
         self._data = data

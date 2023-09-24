@@ -1,9 +1,10 @@
 import datetime
 
+import ujson
 from mmcore.base import AGroup, adict, idict
 from src.props import props_table, colormap
 from mmcore.base.registry import adict, idict
-
+from threading import Thread
 
 def date():
     now = datetime.datetime.now()
@@ -50,16 +51,41 @@ class MaskedRootGroup(RootGroup):
     _mask_name = None
     _owner_uuid = ''
     _children_uuids = None
-
+    cache=None
     def props_update(self, uuids: list[str], props: dict):
         recompute_mask = False
+        print(props)
         if self.mask_name in props.keys():
             recompute_mask = True
 
         ans = super().props_update(uuids, props)
         if recompute_mask:
             self.recompute_mask()
+        self.make_cache()
         return ans
+
+    def make_cache(self):
+        sup=super()
+        def asyncache():
+            #print("caching...")
+            self.cache = sup.root()
+            #print("done")
+        asyncache()
+        #self._th=Thread(target=asyncache)
+        #self._th.start()
+
+
+
+
+
+
+    def root(self, shapes=None, dumps=False):
+        if self.cache is None:
+            self.make_cache()
+        #if self._th.is_alive():
+            #self._th.join(0.5)
+
+        return self.cache
 
     @property
     def owner_uuid(self):
@@ -88,6 +114,10 @@ class MaskedRootGroup(RootGroup):
 
     def recompute_mask(self):
         self._children_uuids = list(filter(self.filter_children, idict[self.owner_uuid]["__children__"]))
+        self.make_cache()
+
+
+
 
     @property
     def children_uuids(self):

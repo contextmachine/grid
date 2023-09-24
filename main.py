@@ -3,7 +3,9 @@ import gzip
 import json
 import pickle
 from collections import Counter
-
+import typing
+typing.TYPE_CHECKING=False
+TYPE_CHECKING=False
 import requests
 import shapely
 import uvicorn
@@ -16,7 +18,7 @@ from mmcore.base.geom import MeshData
 
 dotenv.load_dotenv(dotenv_path=".env")
 reflection = dict(recompute_repr3d=True, mask_index=dict(), cutted_childs=dict(), tris_rg=dict())
-from src.props import TAGDB, colormap, rconn, cols, rmasks, ColorMap
+from src.props import TAGDB, colormap, rconn, cols, rmasks, ColorMap, zone_scopes
 
 from fastapi import FastAPI, UploadFile
 from starlette.responses import FileResponse, HTMLResponse
@@ -27,7 +29,7 @@ from src.cxm_props import BLOCK, PROJECT, ZONE
 from mmcore.geom.materials import ColorRGB
 from mmcore.base import A, AGroup, AMesh
 
-from mmcore.base.sharedstate import serve
+from mmcore.base.sharedstate import serve,debug_properties
 from mmcore.base.registry import adict, idict
 from mmcore.geom.shapes.base import Triangle
 from mmcore.geom.point import GeometryBuffer, BUFFERS
@@ -83,11 +85,13 @@ def prettify(dt, buff=None):
             "block": block,
             "zone": zone
         }
+def get_zone_scopes():
+    return zone_scopes[ZONE]
+if ZONE not in dict(zone_scopes).keys():
+    zone_scopes[ZONE] = [ZONE]
+servreq=get_zone_scopes()
 
-servreq={
-    "w":["w1",'w2','w3','w4'],
-    'l2':['l2']
-}[ZONE]
+
 
 class App:
     ...
@@ -111,9 +115,8 @@ build = requests.post(CONTOUR_SERVER_URL,json=dict(names=servreq)).json()
 
 cut, tri, tri_cen, tri_names = build['mask'], build['shapes'], build['centers'], build['names']
 projmask = cut
-rmasks["cut_mask"] = cut
-rmasks['projmask'] = cut
-cut_mask = rmasks["cut_mask"]
+
+
 
 print(cols)
 
@@ -327,13 +330,19 @@ def masked_group1(owner_uuid, name, mode=True):
 
 
 
-
+def reload_datapoints(addr=f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:datapoints"):
+    _dt = rconn.get(addr)
+    if _dt is not None:
+        if isinstance(_dt, bytes):
+            _dt = _dt.decode()
+        solve_kd(json.loads(_dt))
 def init():
     _dt = rconn.get(f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:datapoints")
     if _dt is not None:
         if isinstance(_dt, bytes):
             _dt = _dt.decode()
         solve_kd(json.loads(_dt))
+
     solve_triangles(tri, tri_names, cols, cut)
 
 
@@ -532,12 +541,31 @@ def where_table(data: dict):
     return FileResponse("table.csv", filename="table.csv", media_type="application/csv")
 @serve.app.get("/update-contours")
 def upd_cont():
-    build = requests.post(CONTOUR_SERVER_URL, json=dict(names=servreq)).json()
+    build = requests.post(CONTOUR_SERVER_URL, json=dict(names=get_zone_scopes())).json()
 
     cut, tri, tri_cen, tri_names = build['mask'], build['shapes'], build['centers'], build['names']
     solve_triangles(tri, tri_names, cols,cut)
     adict[f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut"].recompute_mask()
     return "Ok"
+
+@serve.app.post("/zone-scopes")
+def update_zone_scopes(data:list[str]):
+
+    zone_scopes[ZONE]=data
+    reload_datapoints()
+
+    return {
+        ZONE: zone_scopes[ZONE]
+    }
+
+
+
+@serve.app.get("/zone-scopes")
+def get_zone_scopes():
+
+    return {
+        ZONE: zone_scopes[ZONE]
+    }
 
 
 if os.getenv("TEST_DEPLOYMENT") is None:
@@ -547,9 +575,19 @@ elif os.getenv('DUMP_TAGDB') == "1":
 else:
     aapp = FastAPI()
 aapp.mount(os.getenv("MMCORE_APPPREFIX"), serve.app)
+import threading as th
 
+
+#def app_thread():
+#    uvicorn.run("main:aapp", host='0.0.0.0', port=7711)
+
+debug_properties['target']=f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut"
+#app_th = th.Thread(target=app_thread)
+init()
+#app_th.start()
 #ttg = TrisRGroup(uuid="query_object", name="query_object", _endpoint="where/query_object", rule_data={"cut": 0})
 #ttg.scale(0.001, 0.001, 0.001)
 if __name__ == "__main__":
     init()
+    print(os.getenv("MMCORE_ADDRESS")+"/"+os.getenv("MMCORE_APPPREFIX"))
     uvicorn.run("main:aapp", host='0.0.0.0', port=7711)

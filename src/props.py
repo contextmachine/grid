@@ -11,15 +11,18 @@ from mmcore.base.geom import MeshPhongMaterial
 dotenv.load_dotenv(dotenv_path=".env")
 
 from src.cxm_props import PROJECT, BLOCK, ZONE, DB_NAME
-from mmcore.services.redis.connect import get_cloud_connection
+from mmcore.services.redis.connect import get_cloud_connection, get_local_connection
 from mmcore.services.redis import sets
 
-rconn = get_cloud_connection()
+if os.getenv("LOCAL_REDIS") == '1':
+    rconn = get_local_connection()
+else:
+    rconn = get_cloud_connection()
 sets.rconn = rconn
 rmasks = sets.Hdict(f"{PROJECT}:{BLOCK}:{ZONE}:masks")
 cols = dict(sets.Hdict(f"{PROJECT}:colors"))
 
-
+zone_scopes=sets.Hdict(f"{PROJECT}:{BLOCK}:zone_scopes")
 class ColorMap(dict):
     def __init__(self, *args, hset_key=f"{PROJECT}:colors", **kwargs):
         self._hset = sets.Hdict(hset_key)
