@@ -7,7 +7,7 @@ import typing
 typing.TYPE_CHECKING=False
 TYPE_CHECKING=False
 import requests
-import shapely
+
 import uvicorn
 import os
 import dotenv
@@ -31,17 +31,15 @@ from mmcore.base import A, AGroup, AMesh
 
 from mmcore.base.sharedstate import serve,debug_properties
 from mmcore.base.registry import adict, idict
-from mmcore.geom.shapes.base import Triangle
-from mmcore.geom.point import GeometryBuffer, BUFFERS
-from mmcore.geom.parametric import algorithms
+
 from mmcore.base import ALine, A, APoints, AGroup
 import rich
 rich.print(dict(os.environ))
 
 
 print(TAGDB)
-from src.pairs import gen_pair_stats, gen_stats_to_pairs, solve_pairs_stats
-from src.parts import Column, Db, Part, RedisBind
+from src.pairs import solve_pairs_stats
+
 
 # This Api provides an extremely flexible way of updating data. You can pass any part of the parameter dictionary
 # structure, the parameters will be updated recursively and only the part of the graph affected by the change
@@ -87,18 +85,10 @@ def prettify(dt, buff=None):
         }
 def get_zone_scopes():
     return zone_scopes[ZONE]
+
 if ZONE not in dict(zone_scopes).keys():
     zone_scopes[ZONE] = [ZONE]
 servreq=get_zone_scopes()
-
-
-
-class App:
-    ...
-class Buf(GeometryBuffer):
-    def append(self, item):
-        return super().add_item(item)
-
 
 def set_static_build_data(key, data, conn):
     return conn.set(key, gzip.decompress(json.dumps(data).encode()))
@@ -116,26 +106,9 @@ build = requests.post(CONTOUR_SERVER_URL,json=dict(names=servreq)).json()
 cut, tri, tri_cen, tri_names = build['mask'], build['shapes'], build['centers'], build['names']
 projmask = cut
 
-
-
-print(cols)
-
-
 itm2 = []
 
 arr = np.asarray(tri_cen).reshape((len(tri_cen), 3))
-
-
-# arr[..., 2] *= 0
-
-
-def check_mask(mask):
-    _masks = dict(rmasks)
-
-    def m(x):
-        return mask[x[0]] if x[0] in mask.keys() else False
-
-    return filter(m, _masks.items())
 
 
 def solve_kd(new_data):
@@ -311,24 +284,6 @@ def solve_triangles(triangles, names, colors, mask):
 
 
     idict[f"{PROJECT}_{BLOCK}_{ZONE}_panels"]["__children__"]=set(reflection['tri_items'].keys())
-def masked_group1(owner_uuid, name, mode=True):
-    global mask_db
-    uid = f"{owner_uuid}_masked_{name}"
-    if uid in adict.keys():
-        grp = adict[uid]
-    else:
-        grp = RootGroup(name=adict[owner_uuid].name, uuid=f"{owner_uuid}_masked_{name}")
-        grp.scale(0.001, 0.001, 0.001)
-
-    if mode:
-        idict[uid]["__children__"] = set(filter(lambda x: props_table[x][name] <= 1, idict[owner_uuid]['__children__']))
-    else:
-        idict[uid]["__children__"] = set(
-            filter(lambda x: Part(list(mask_db.cols["self_uuid"].data.values()).index(x), mask_db).get(name) <= 1,
-                   idict[owner_uuid]['__children__']))
-    return grp
-
-
 
 def reload_datapoints(addr=f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:datapoints"):
     _dt = rconn.get(addr)
@@ -359,6 +314,8 @@ def init():
 def on_shutdown():
     print("Grace Shutdown")
     return rconn.set(TAGDB, pickle.dumps(props_table))
+
+
 @serve.app.get("/table")
 def stats1():
     tab = pd.DataFrame([dict(list(i) + [("name", i.index)]) for i in reflection["tris"]])
@@ -375,14 +332,6 @@ async def mask_handle(name, data: dict):
 
     # cmr(masks=mm)
     # return mm
-
-
-@serve.app.post("/masks/v2/add/{uuid}/{name}")
-async def mask_handle_v2(uuid: str, name: str, data: dict):
-    if 'masks' in data.keys():
-        props_table.set_column(name, dict(zip(props_table.get_column("tag").keys(), data['masks'])))
-    grp = masked_group1(uuid, name)
-    return grp.root()
 
 
 @serve.app.post("/triangle_handle/{uid}")
@@ -476,27 +425,6 @@ def where_query(data: dict):
     return [dict(list(_i) + [("name", _i.index)]) for _i in list(filter(rul, reflection["tris"]))]
 
 
-class TrisRGroup(RootGroup):
-
-    @property
-    def rule_data(self):
-        return reflection["tris_rg"].get(self.uuid, dict())
-
-    @rule_data.setter
-    def rule_data(self, data):
-        reflection["tris_rg"][self.uuid] = data
-        self.controls = data
-
-    @property
-    def children_uuids(self):
-        return set(itm.index for itm in filter(self.filter_children, reflection["tris"]))
-
-    def filter_children(self, x):
-        if len(self.rule_data) == 0:
-            return False
-        return all([x[k] == self.rule_data[k] for k in self.rule_data])
-
-
 @serve.app.post("/where/{uid}")
 async def where_obj(uid: str, data: dict):
     adict.get(uid).rule_data = data
@@ -558,8 +486,6 @@ def update_zone_scopes(data:list[str]):
         ZONE: zone_scopes[ZONE]
     }
 
-
-
 @serve.app.get("/zone-scopes")
 def get_zone_scopes():
 
@@ -575,12 +501,11 @@ elif os.getenv('DUMP_TAGDB') == "1":
 else:
     aapp = FastAPI()
 aapp.mount(os.getenv("MMCORE_APPPREFIX"), serve.app)
-import threading as th
 
 
+#import threading as th
 #def app_thread():
 #    uvicorn.run("main:aapp", host='0.0.0.0', port=7711)
-
 debug_properties['target']=f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut"
 #app_th = th.Thread(target=app_thread)
 init()
