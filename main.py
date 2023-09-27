@@ -231,14 +231,14 @@ def solve_triangles(triangles, names, colors, mask, areas):
 
                         props_table.columns["pair_name"][uuid + f"_{k + 1}"] = pair_name
                         props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
-                        props_table[uuid]["area"] = areas[i][k]['area']
+                        props_table.columns["area"][uuid + f"_{k + 1}"]  = areas[i][k]['area']
 
                     except:
                         # props_table[uuid + f"_{k + 1}"].set(new_props)
                         # props_table.columns["mount"][uuid + f"_{k + 1}"] = mnt
                         props_table.columns["pair_name"][uuid + f"_{k + 1}"] = pair_name
                         props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
-                        props_table[uuid]["area"] = areas[i][k]['area']
+                        props_table.columns["area"][uuid + f"_{k + 1}"]  = areas[i][k]['area']
 
                     #trii = Triangle(*pts)
 
