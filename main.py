@@ -102,7 +102,7 @@ def get_static_build_data(key, conn):
 CONTOUR_SERVER_URL=f'{os.getenv("CONTOUR_SERVER_URL")}/contours-merged'
 build = requests.post(CONTOUR_SERVER_URL,json=dict(names=servreq)).json()
 
-cut, tri, tri_cen, tri_names = build['mask'], build['shapes'], build['centers'], build['names']
+cut, tri, tri_cen, tri_names, ar = build['mask'], build['shapes'], build['centers'], build['names'], build['props']
 projmask = cut
 
 itm2 = []
@@ -154,7 +154,7 @@ class CompoundPanel(AGroup):
         props_table[self.uuid].set(dict(props))'''
 
 
-def solve_triangles(triangles, names, colors, mask):
+def solve_triangles(triangles, names, colors, mask, areas):
     reflection["tri_items"] = dict()
     reflection["tris"] = []
     for i, j in enumerate(reflection['ix']):
@@ -191,6 +191,7 @@ def solve_triangles(triangles, names, colors, mask):
         # ADD PAIRS!
         props_table[uuid]["pair_name"] = pair_name
         props_table[uuid]["pair_index"] = uuid[-1]
+        props_table[uuid]["area"] = areas[i][0]['area']
         # ADD PAIRS!
 
         if uuid not in reflection["tri_items"].keys():
@@ -230,12 +231,14 @@ def solve_triangles(triangles, names, colors, mask):
 
                         props_table.columns["pair_name"][uuid + f"_{k + 1}"] = pair_name
                         props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
+                        props_table[uuid]["area"] = areas[i][k]['area']
 
                     except:
                         # props_table[uuid + f"_{k + 1}"].set(new_props)
                         # props_table.columns["mount"][uuid + f"_{k + 1}"] = mnt
                         props_table.columns["pair_name"][uuid + f"_{k + 1}"] = pair_name
                         props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
+                        props_table[uuid]["area"] = areas[i][k]['area']
 
                     #trii = Triangle(*pts)
 
@@ -297,7 +300,7 @@ def init():
             _dt = _dt.decode()
         solve_kd(json.loads(_dt))
 
-    solve_triangles(tri, tri_names, cols, cut)
+    solve_triangles(tri, tri_names, cols, cut, ar)
 
 
     pgrp = MaskedRootGroup(uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut",
@@ -471,8 +474,8 @@ def upd_cont():
     print(get_zone_scopes())
     build = requests.post(CONTOUR_SERVER_URL,json=dict(names=servreq)).json()
 
-    cut, tri, tri_cen, tri_names = build['mask'], build['shapes'], build['centers'], build['names']
-    solve_triangles(tri, tri_names, cols,cut)
+    cut, tri, tri_cen, tri_names, ar = build['mask'], build['shapes'], build['centers'], build['names'], build['props']
+    solve_triangles(tri, tri_names, cols,cut, ar)
     adict[f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut"].recompute_mask()
     return "Ok"
 
@@ -483,8 +486,8 @@ def update_zone_scopes(data:list[str]):
     servreq[ZONE]=data
     build = requests.post(CONTOUR_SERVER_URL, json=dict(names=servreq)).json()
 
-    cut, tri, tri_cen, tri_names = build['mask'], build['shapes'], build['centers'], build['names']
-    solve_triangles(tri, tri_names, cols, cut)
+    cut, tri, tri_cen, tri_names, ar = build['mask'], build['shapes'], build['centers'], build['names'], build['props']
+    solve_triangles(tri, tri_names, cols, cut, ar)
     adict[f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut"].recompute_mask()
 
     return {
