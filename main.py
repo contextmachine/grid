@@ -86,8 +86,7 @@ def prettify(dt, buff=None):
 def get_zone_scopes():
     return zone_scopes[ZONE]
 
-if ZONE not in dict(zone_scopes).keys():
-    zone_scopes[ZONE] = [ZONE]
+
 servreq=get_zone_scopes()
 
 def set_static_build_data(key, data, conn):
@@ -469,7 +468,8 @@ def where_table(data: dict):
     return FileResponse("table.csv", filename="table.csv", media_type="application/csv")
 @serve.app.get("/update-contours")
 def upd_cont():
-    build = requests.post(CONTOUR_SERVER_URL, json=dict(names=get_zone_scopes())).json()
+    print(get_zone_scopes())
+    build = requests.post(CONTOUR_SERVER_URL,json=dict(names=servreq)).json()
 
     cut, tri, tri_cen, tri_names = build['mask'], build['shapes'], build['centers'], build['names']
     solve_triangles(tri, tri_names, cols,cut)
@@ -480,7 +480,12 @@ def upd_cont():
 def update_zone_scopes(data:list[str]):
 
     zone_scopes[ZONE]=data
-    reload_datapoints()
+    servreq[ZONE]=data
+    build = requests.post(CONTOUR_SERVER_URL, json=dict(names=servreq)).json()
+
+    cut, tri, tri_cen, tri_names = build['mask'], build['shapes'], build['centers'], build['names']
+    solve_triangles(tri, tri_names, cols, cut)
+    adict[f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut"].recompute_mask()
 
     return {
         ZONE: zone_scopes[ZONE]
@@ -508,7 +513,7 @@ aapp.mount(os.getenv("MMCORE_APPPREFIX"), serve.app)
 #    uvicorn.run("main:aapp", host='0.0.0.0', port=7711)
 debug_properties['target']=f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut"
 #app_th = th.Thread(target=app_thread)
-init()
+#init()
 #app_th.start()
 #ttg = TrisRGroup(uuid="query_object", name="query_object", _endpoint="where/query_object", rule_data={"cut": 0})
 #ttg.scale(0.001, 0.001, 0.001)
