@@ -74,11 +74,6 @@ class MaskedRootGroup(RootGroup):
         #self._th=Thread(target=asyncache)
         #self._th.start()
 
-
-
-
-
-
     def root(self, shapes=None, dumps=False):
         if self.cache is None:
             self.make_cache()

@@ -50,6 +50,8 @@ A.__gui_controls__.config.address = os.getenv("MMCORE_ADDRESS")
 A.__gui_controls__.config.api_prefix = os.getenv("MMCORE_APPPREFIX")
 
 from src.root_group import RootGroup, props_table, MaskedRootGroup
+from src.gsh import GoogleSheetApiManager, GoogleSheetApiManagerEnableEvent, GoogleSheetApiManagerState, \
+    GoogleSheetApiManagerWrite
 
 
 # props_table = TagDB("mfb_sw_l2_panels")
@@ -124,6 +126,12 @@ def solve_kd(new_data):
     reflection["ix"] = ix
     reflection["recompute_repr3d"] = True
 
+google_sheet_manager=GoogleSheetApiManager(sheet_id=os.getenv("SHEET_ID"))
+
+class GoogleSupportRootGroup(MaskedRootGroup):
+    def make_cache(self):
+        super().make_cache()
+        google_sheet_manager.update_all(reflection["tris"])
 
 class PanelMesh(AMesh):
 
@@ -300,7 +308,7 @@ def init():
     solve_triangles(tri, tri_names, cols, cut)
 
 
-    pgrp = MaskedRootGroup(uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut",
+    pgrp = GoogleSupportRootGroup(uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut",
                            name=f"{BLOCK} {ZONE}".upper(),
 
                            owner_uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels")
@@ -392,6 +400,7 @@ async def stats():
 @serve.app.get("/stats/pairs")
 async def stats_pairs():
     return reflection["pairs_stats"]
+
 
 
 @serve.app.get("/props_table")
@@ -497,6 +506,54 @@ def get_zone_scopes():
     return {
         ZONE: zone_scopes[ZONE]
     }
+
+
+@serve.app.get("/gsheet")
+async def get_gsheet_state():
+    return google_sheet_manager.state
+
+
+@serve.app.post("/gsheet")
+async def post_gsheet_state(data: GoogleSheetApiManagerState):
+    google_sheet_manager.update_state(data)
+    google_sheet_manager.update_all(reflection["tris"])
+    return google_sheet_manager.state
+
+
+@serve.app.post("/gsheet/enabled")
+async def post_gsheet_enabled(data: GoogleSheetApiManagerEnableEvent):
+    google_sheet_manager.state.enable = data.value
+    google_sheet_manager.update_all(reflection["tris"])
+    return GoogleSheetApiManagerEnableEvent(value=google_sheet_manager.state.enable)
+
+
+@serve.app.post("/gsheet/writes/add")
+async def add_gsheet_writes(data: list[GoogleSheetApiManagerWrite]):
+    google_sheet_manager.state.writes.extend(data)
+    google_sheet_manager.update_all(reflection["tris"])
+    return google_sheet_manager.state.writes
+
+
+@serve.app.post("/gsheet/writes")
+async def post_gsheet_writes(data: list[GoogleSheetApiManagerWrite]):
+    google_sheet_manager.state.writes = data
+    google_sheet_manager.update_all(reflection["tris"])
+    return google_sheet_manager.state.writes
+
+@serve.app.get("/gsheet/update_data_in_google_sheet_table")
+async def gsheet_update():
+
+
+    if google_sheet_manager.state.enable:
+        try:
+            google_sheet_manager.update_all(reflection["tris"])
+            return {"success": True, "reason": None}
+        except Exception as err:
+            return {"success": False, "reason": {"exception": repr(err)}}
+    else:
+        return {"success": False, "reason": {"state": {
+            "enable": False
+        }}}
 
 
 if os.getenv("TEST_DEPLOYMENT") is None:

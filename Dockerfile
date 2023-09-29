@@ -5,5 +5,5 @@ COPY . .
 EXPOSE 7711
 ENV MMCORE_APPPREFIX="/cxm/api/v2/mfb_sw_l2/"
 ENV MMCORE_ADDRESS="https://viewer.contextmachine.online"
-RUN python3 -m pip install python-multipart --break-system-packages
+RUN python3 -m pip install python-multipart oauth2client httplib2 google-api-python-client --break-system-packages
 ENTRYPOINT ["python3", "main.py"]
