@@ -1,5 +1,7 @@
 import dataclasses
 import os
+import typing
+
 import httplib2
 from googleapiclient.discovery import build
 
@@ -30,8 +32,26 @@ def resort(data, ks):
     for item in data:
         yield [item.get(k) for k in ks]
 
+def pair_stats(data, key='arch_type', mask='cut', sep=" "):
+    dct = dict()
+    iterkey = not isinstance(key, str)
+    for item in data:
+        spited_name = item["name"].split("_")
+        projmask = item[mask]
+        if projmask != 2:
+            pair_name =  spited_name[3] + "_" + spited_name[4]
+            if pair_name not in dct:
+                dct[pair_name] = ""
 
-def stats(data, key='arch_type'):
+            if iterkey:
+                    for k in key:
+                        dct[pair_name] += f'{sep}{item[k]}'
+            else:
+                    dct[pair_name] += f'{sep}{item[key]}'
+
+    return list(Counter(dct.values()).items())
+
+def _pair_stats(data, key='arch_type',**kwargs):
     dct = dict()
     for item in data:
         spited_name = item["name"].split("_")
@@ -43,6 +63,7 @@ def stats(data, key='arch_type'):
             dct[pairIndex] += item[key]
 
     return list(Counter(dct.values()).items())
+
 
 
 # https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/update
@@ -73,7 +94,10 @@ _table_keys = ('name',
 @dataclasses.dataclass
 class GoogleSheetApiManagerWrite:
     sheet_range: str
-    key: str
+    key: typing.Union[str,list[str]]
+    mask: str="cut"
+    sep: str=" "
+
 
 
 @dataclasses.dataclass
@@ -87,7 +111,7 @@ class GoogleSheetApiManagerState:
 class GoogleSheetApiManagerEnableEvent:
     value:bool
 class GoogleSheetApiManager:
-    def __init__(self, state:GoogleSheetApiManagerState=None, /,
+    def __init__(self, state: GoogleSheetApiManagerState=None, /,
                  sheet_id=None,
                  main_sheet_range="SW_L2_test!A1",
                  table_keys=_table_keys, writes=None, enable=True):
@@ -129,7 +153,7 @@ class GoogleSheetApiManager:
             def proc():
                 update_sheet(list(self.resort_table(data_)), sheet_range=self.state.main_sheet_range)
                 for write in self.state.writes:
-                    update_sheet(stats(data_, key=write.key), sheet_range=write.sheet_range)
+                    update_sheet(pair_stats(data_, key=write.key, mask=write.mask, sep=write.sep), sheet_range=write.sheet_range)
                 print("google sheet updated!")
 
             thread = th.Thread(target=proc)

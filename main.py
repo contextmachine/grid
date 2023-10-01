@@ -102,6 +102,7 @@ def get_static_build_data(key, conn):
 #
 #cut, tri, tri_cen, tri_names = build['cut'], build['cutted_tri'], build['centers'], build['names']
 CONTOUR_SERVER_URL=f'{os.getenv("CONTOUR_SERVER_URL")}/contours-merged'
+print(servreq)
 build = requests.post(CONTOUR_SERVER_URL,json=dict(names=servreq)).json()
 
 cut, tri, tri_cen, tri_names, ar = build['mask'], build['shapes'], build['centers'], build['names'], build['props']
@@ -489,7 +490,7 @@ def upd_cont():
     return "Ok"
 
 @serve.app.post("/zone-scopes")
-def update_zone_scopes(data:list[str]):
+def update_zone_scopes(data: list[str]):
 
     zone_scopes[ZONE]=data
     servreq[ZONE]=data
