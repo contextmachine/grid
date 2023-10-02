@@ -14,6 +14,7 @@ import json
 from collections import Counter
 
 
+
 def get_service_sacc():
     scopes = ['https://www.googleapis.com/auth/spreadsheets']
     creds_service = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(os.getenv("GOOGLE_KF")),
@@ -22,7 +23,6 @@ def get_service_sacc():
 
 
 sheet = get_service_sacc().spreadsheets()
-
 
 # import json
 
@@ -96,9 +96,12 @@ class GoogleSheetApiManagerWrite:
     sheet_range: str
     key: typing.Union[str,list[str]]
     mask: str="cut"
-    sep: str=" "
+    sep: str = " "
 
+    @classmethod
+    def from_dict(cls, dct):
 
+        return cls(**dct)
 
 @dataclasses.dataclass
 class GoogleSheetApiManagerState:
@@ -107,6 +110,15 @@ class GoogleSheetApiManagerState:
     table_keys: list[str]
     writes: list[GoogleSheetApiManagerWrite]
     enable:bool=True
+
+    @classmethod
+    def from_dict(cls, dct):
+        writes = dct.get('writes', [])
+        if not len(writes) == 0:
+            dct['writes'] = [GoogleSheetApiManagerWrite.from_dict(write) for write in writes]
+        return cls(**dct)
+
+
 @dataclasses.dataclass
 class GoogleSheetApiManagerEnableEvent:
     value:bool
@@ -132,6 +144,7 @@ class GoogleSheetApiManager:
 
     def update_state(self, state: GoogleSheetApiManagerState):
         self.state = state
+
 
     def resort_table(self, data):
         return resort(data, self.state.table_keys)

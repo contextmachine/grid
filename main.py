@@ -18,7 +18,7 @@ from mmcore.base.geom import MeshData
 
 dotenv.load_dotenv(dotenv_path=".env")
 reflection = dict(recompute_repr3d=True, mask_index=dict(), cutted_childs=dict(), tris_rg=dict())
-from src.props import TAGDB, colormap, rconn, cols, rmasks, ColorMap, zone_scopes
+from src.props import TAGDB, colormap, rconn, cols, rmasks, ColorMap, zone_scopes, gsheet_spec
 
 from fastapi import FastAPI, UploadFile
 from starlette.responses import FileResponse, HTMLResponse
@@ -127,7 +127,7 @@ def solve_kd(new_data):
     reflection["ix"] = ix
     reflection["recompute_repr3d"] = True
 
-google_sheet_manager=GoogleSheetApiManager(sheet_id=os.getenv("SHEET_ID"))
+google_sheet_manager=GoogleSheetApiManager(GoogleSheetApiManagerState.from_dict(dict(gsheet_spec[BLOCK][ZONE])))
 
 class GoogleSupportRootGroup(MaskedRootGroup):
     def make_cache(self):
@@ -163,7 +163,7 @@ class CompoundPanel(AGroup):
         props_table[self.uuid].set(dict(props))'''
 
 
-def solve_triangles(triangles, names, colors, mask, areas):
+def solve_triangles(triangles, names, colors, mask, areas, area_exp=lambda val: round(val*1e-6, 4)):
     reflection["tri_items"] = dict()
     reflection["tris"] = []
     for i, j in enumerate(reflection['ix']):
@@ -200,7 +200,7 @@ def solve_triangles(triangles, names, colors, mask, areas):
         # ADD PAIRS!
         props_table[uuid]["pair_name"] = pair_name
         props_table[uuid]["pair_index"] = uuid[-1]
-        props_table[uuid]["area"] = areas[i][0]['area']
+        props_table[uuid]["area"] = area_exp(areas[i][0]['area'])
         # ADD PAIRS!
 
         if uuid not in reflection["tri_items"].keys():
@@ -240,14 +240,14 @@ def solve_triangles(triangles, names, colors, mask, areas):
 
                         props_table.columns["pair_name"][uuid + f"_{k + 1}"] = pair_name
                         props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
-                        props_table.columns["area"][uuid + f"_{k + 1}"]  = areas[i][k]['area']
+                        props_table.columns["area"][uuid + f"_{k + 1}"]  = area_exp(areas[i][k]['area'])
 
                     except:
                         # props_table[uuid + f"_{k + 1}"].set(new_props)
                         # props_table.columns["mount"][uuid + f"_{k + 1}"] = mnt
                         props_table.columns["pair_name"][uuid + f"_{k + 1}"] = pair_name
                         props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
-                        props_table.columns["area"][uuid + f"_{k + 1}"]  = areas[i][k]['area']
+                        props_table.columns["area"][uuid + f"_{k + 1}"]  = area_exp(areas[i][k]['area'])
 
                     #trii = Triangle(*pts)
 
@@ -324,6 +324,7 @@ def init():
 
 def on_shutdown():
     print("Grace Shutdown")
+    rconn.set(TAGDB, pickle.dumps(props_table))
     return rconn.set(TAGDB, pickle.dumps(props_table))
 
 
@@ -520,6 +521,7 @@ async def get_gsheet_state():
 @serve.app.post("/gsheet")
 async def post_gsheet_state(data: GoogleSheetApiManagerState):
     google_sheet_manager.update_state(data)
+    gsheet_spec[BLOCK][ZONE] = dataclasses.asdict(google_sheet_manager.state)
     google_sheet_manager.update_all(reflection["tris"])
     return google_sheet_manager.state
 
@@ -527,6 +529,7 @@ async def post_gsheet_state(data: GoogleSheetApiManagerState):
 @serve.app.post("/gsheet/enabled")
 async def post_gsheet_enabled(data: GoogleSheetApiManagerEnableEvent):
     google_sheet_manager.state.enable = data.value
+    gsheet_spec[BLOCK][ZONE] = dataclasses.asdict(google_sheet_manager.state)
     google_sheet_manager.update_all(reflection["tris"])
     return GoogleSheetApiManagerEnableEvent(value=google_sheet_manager.state.enable)
 
@@ -534,6 +537,7 @@ async def post_gsheet_enabled(data: GoogleSheetApiManagerEnableEvent):
 @serve.app.post("/gsheet/writes/add")
 async def add_gsheet_writes(data: list[GoogleSheetApiManagerWrite]):
     google_sheet_manager.state.writes.extend(data)
+    gsheet_spec[BLOCK][ZONE] = dataclasses.asdict(google_sheet_manager.state)
     google_sheet_manager.update_all(reflection["tris"])
     return google_sheet_manager.state.writes
 
@@ -541,6 +545,7 @@ async def add_gsheet_writes(data: list[GoogleSheetApiManagerWrite]):
 @serve.app.post("/gsheet/writes")
 async def post_gsheet_writes(data: list[GoogleSheetApiManagerWrite]):
     google_sheet_manager.state.writes = data
+    gsheet_spec[BLOCK][ZONE]=dataclasses.asdict(google_sheet_manager.state)
     google_sheet_manager.update_all(reflection["tris"])
     return google_sheet_manager.state.writes
 

@@ -1,3 +1,4 @@
+import json
 import os
 import pickle
 
@@ -21,6 +22,42 @@ else:
 sets.rconn = rconn
 rmasks = sets.Hdict(f"{PROJECT}:{BLOCK}:{ZONE}:masks")
 cols = dict(sets.Hdict(f"{PROJECT}:colors"))
+
+base_gsh=json.loads("""{
+  "sheet_id": "150p5C3tNDHt5KJylrcpwLpK0Wrgf6zjZDgFKL5vZypA",
+  "main_sheet_range": "SW_L2_test!A1",
+  "table_keys": [
+    "name",
+    "tag",
+    "arch_type",
+    "eng_type",
+    "block",
+    "zone",
+    "cut",
+    "pair_name",
+    "pair_index",
+    "mount",
+    "mount_date",
+    "area"
+  ],
+  "writes": [
+    {
+      "sheet_range": "SW_L2_pair_count_test!A2",
+      "key": "arch_type",
+      "mask": "cut",
+      "sep": " "
+    },
+    {
+      "sheet_range": "SW_L2_pair_count_test!G2",
+      "key": "tag",
+      "mask": "cut",
+      "sep": " "
+    }
+  ],
+  "enable": true
+}""")
+gsheet_spec=sets.Hset(f"{PROJECT}:gsheet")
+
 
 zone_scopes=sets.Hdict(f"{PROJECT}:{BLOCK}:zone_scopes")
 class ColorMap(dict):
@@ -150,6 +187,7 @@ if os.getenv("RECREATE_TAGDB"):
     props_table.add_column("mount_date", default="", column_type=str)
     props_table.add_column("tag", default="", column_type=str)
     props_table.columns['tag'] = SolvedTagColumn(props_table.uuid)
+
 elif props_table is None:
     props_table = PanelsTagDB(f"{PROJECT}_{BLOCK}_{ZONE}_panels")
     props_table.add_column("mount", default=False, column_type=bool)
