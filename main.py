@@ -494,7 +494,10 @@ def upd_cont():
 def update_zone_scopes(data: list[str]):
 
     zone_scopes[ZONE]=data
-    servreq[ZONE]=data
+    for d in data:
+        if d not in servreq:
+            servreq.append(d)
+
     build = requests.post(CONTOUR_SERVER_URL, json=dict(names=servreq)).json()
 
     cut, tri, tri_cen, tri_names, ar = build['mask'], build['shapes'], build['centers'], build['names'], build['props']
