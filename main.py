@@ -7,7 +7,6 @@ import typing
 typing.TYPE_CHECKING=False
 TYPE_CHECKING=False
 import requests
-
 import uvicorn
 import os
 import dotenv
@@ -101,7 +100,7 @@ def get_static_build_data(key, conn):
 #build = json.loads(gzip.decompress(rconn.get(f"{PROJECT}:{BLOCK}:{ZONE}:build")).decode())
 #
 #cut, tri, tri_cen, tri_names = build['cut'], build['cutted_tri'], build['centers'], build['names']
-CONTOUR_SERVER_URL=f'{os.getenv("CONTOUR_SERVER_URL")}/contours-merged'
+CONTOUR_SERVER_URL=f'{os.getenv("CONTOUR_SERVER_URL")}/{BLOCK}/contours-merged'
 print(servreq)
 build = requests.post(CONTOUR_SERVER_URL,json=dict(names=servreq)).json()
 
@@ -486,6 +485,16 @@ def upd_cont():
     build = requests.post(CONTOUR_SERVER_URL,json=dict(names=servreq)).json()
 
     cut, tri, tri_cen, tri_names, ar = build['mask'], build['shapes'], build['centers'], build['names'], build['props']
+    solve_triangles(tri, tri_names, cols,cut, ar)
+    adict[f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut"].recompute_mask()
+    return "Ok"
+@serve.app.get("/update-types")
+def upd_types():
+    print(get_zone_scopes())
+    build = requests.post(CONTOUR_SERVER_URL,json=dict(names=servreq)).json()
+
+    cut, tri, tri_cen, tri_names, ar = build['mask'], build['shapes'], build['centers'], build['names'], build['props']
+    reload_datapoints()
     solve_triangles(tri, tri_names, cols,cut, ar)
     adict[f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut"].recompute_mask()
     return "Ok"

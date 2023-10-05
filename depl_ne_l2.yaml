@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mfb-ne-l2
+  labels:
+    app: mfb-ne-l2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mfb-ne-l2
+  template:
+    metadata:
+      name: mfb-ne-l2
+      labels:
+        app: mfb-ne-l2
+    spec:
+      containers:
+
+        - name: mfb-ne-l2-container
+          image:  cr.yandex/crpfskvn79g5ht8njq0k/cxm_grid_service:latest
+          imagePullPolicy: Always
+          env:
+          - name: MMCORE_APPPREFIX
+            value: '/cxm/api/v2/mfb_ne_l2/'
+          - name: MMCORE_ADDRESS
+            value: "https://viewer.contextmachine.online"
+          - name: REDIS_HOST
+            value: c-c9qr4u1s1u8nfqoisnpc.rw.mdb.yandexcloud.net
+          - name: REDIS_PORT
+            value: "6379"
+          - name: REDIS_PASSWORD
+            value: robotrobot
+          - name: DUMP_TAGDB
+            value: "1"
+          - name: CXM_PROJECT
+            value: mfb
+          - name: CXM_BLOCK
+            value: ne
+          - name: CXM_ZONE
+            value: l2
+          - name: VERSVERS
+            value: "3"
+          - name: CONTOUR_SERVER_URL
+            value: http://mfb-contour-server.default.svc.cluster.local:7712/cxm/api/v2/mfb_contour_server
+          - name: DB_NAME
+            value: tagdb
+          - name: SHEET_ID
+            value: 150p5C3tNDHt5KJylrcpwLpK0Wrgf6zjZDgFKL5vZypA
+          - name: GOOGLE_KF
+            value: '{"type": "service_account","project_id": "cxm-project","private_key_id":
+            "ab9a02e9d7d2a025dff7e6f4bfaa26617cd488cc","private_key": "-----BEGIN
+            PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDNYsUR5+0R6Y6k\nfEQpFxKpA/gVhxtn/hOBirBkmXQh/fpZ1UAa7BQ4jSuJPegwNx9OTVl4WH1piNir\nB+96yWDsqsStCB8A1EcELKzSDFur75Zt1DeyMBUruG30XgdLvpbJ8ohJWZg2FLsD\npyAfrSYSXGiKXMv2R0AmXuxbSAmmxPeEoRgb423Mx760ocTAwdROC8PtPntcfAA5\neX079d9LEe0i5OzEfyfinw1yMH5IGrBNgU28oJ4drlP6K5y+Ve9PldwZp32D2pjg\njwFADHxIC73sVJxIv86zHCK6AICz7ia0BUSq/bdMU20/bXQuQFEcEKNbwlaAR2sd\nSf0LEhIdAgMBAAECggEAEyLmBjhUDiRzCi/a4PI5pp5MTeMwAkU514rOyxzCJY2m\ntxqHtcpzyt4aZZfrS5zDMbZCxRQHoV7jAzKC1W+wdHSnzRBx5Q+iS0kHVC3bF77D\nxxlsFBHnUxLEye095EiOf6P1n1H1/On7D8jRVSo6nyDVi7jAN0Llvv1+q7WfUpai\nUi6HOvmZLMdh31AZZrF5qfx7QEm8RXW+OWVgbC/D4BuAnx+K3RMIdnTdBELT19JW\nSmiNvO4o9t7JzY1KErDu84BeK7tho+p9cLmPbMafUNZOfsS5YoC+XPAJ2ktctLHu\n1Ga0ZHN5i4Z4Jf9+qIZ1cSlbbZjfew8ffStdvuCY6QKBgQDsj6vBUiLweC9kQP/T\nc4yMw3XmjAyt7+zKSZpJXuNn+TSb9CzSDSFvDwtdIaLc6uVK4vwbg+v0SlIsMr2Y\nMUopgE+pU9PrkJ3m0oCR8aRyfiVbMIHnuAmcqKmAcklQsuqnR1iRmbxpK7tgfKLy\nKHWYsmytbhT7a1zzFLz63kXRSQKBgQDeQ0onzST8eI2ipcZzG5iP5MzhYfMiN9l7\ndmm/uGFq15j4kf/ZCXql7fcM44EZ4S24JLEFmAOp4HNieB2cv1Aab780mk6PbsWd\nnklKSJZhtJ5FwsilxweY14uee4ZjPlUiO9zjvCTZaQHL58suv+5ApqYQR5zwbeKj\nNAA6+43ONQKBgA8F6MB0OOfQmiHhxt1k3y4pU5l6l2uMaxtFpVi3f/Wga+jjjt0g\nHFlzOSOG+VLSUBF7bMtKi3eOKL3J0ySRLMaJ8YUtX638FysLf0LFd84VmMW7xOQ0\nWdfrFiikGWfYlPJeo49Llh2Pu2ybPbXnP+CcpC43aXm2DccaMA42g3SRAoGAcoES\nHA0ox9THiwqCgVyvLTp/foF6w58oMN3hPv8bWPK3gR+eQk8K258Lzp0KLq3+Ysas\nWChngsX6S7l77/vzpZr6U3xHisdTkY8xTM62gqGNhH0D57vwowIwkLYslsZPD7Lt\nannMNiFN5qGE4JHKiY4RMYPjS04hG1k34SsldB0CgYBZ8XjOsXaUqjkcVcB45ACG\n8VUjl1FovAvUnykAcHs+34+WK1AIprI9az0U8sHCN4SGwWmF65DtmguwHZNfgU3j\nqt87b4l6Nwrnu8Jq3jc2j89f3TZCPf0o+qpLHxz9mhKz6HdJ3tqMsCXzm/T0U7nE\ng4SnRAGkjM835eSsU3T+Dw==\n-----END
+            PRIVATE KEY-----\n","client_email": "cxm-service@cxm-project.iam.gserviceaccount.com","client_id":
+            "105890250964190980353","auth_uri": "https://accounts.google.com/o/oauth2/auth",  "token_uri":
+            "https://oauth2.googleapis.com/token",  "auth_provider_x509_cert_url":
+            "https://www.googleapis.com/oauth2/v1/certs",  "client_x509_cert_url":
+            "https://www.googleapis.com/robot/v1/metadata/x509/cxm-service%40cxm-project.iam.gserviceaccount.com",  "universe_domain":
+            "googleapis.com" }'
+
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mfb-ne-l2
+spec:
+  selector:
+    app: mfb-ne-l2
+  ports:
+    - name: http
+      port: 7711
+      protocol: TCP
+      targetPort: 7711
+  sessionAffinity: None
+  type: ClusterIP

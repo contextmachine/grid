@@ -85,6 +85,17 @@ class SvetaJson:
         with open(path, "rb") as f:
             return cls(json.load(f))
 
+    @classmethod
+    def from_objects_list(cls, lst:list):
+        dct=dict()
+        for i,o in enumerate(lst):
+            for k in o.keys():
+                if k not in dct:
+                    dct[k]=len(lst)*[None]
+                dct[k][i]=o[k]
+
+        return cls([dict(kv) for kv in dct.items()])
+
 
 def merge(target, parts):
     d = None
