@@ -17,7 +17,7 @@ from mmcore.base.geom import MeshData
 
 dotenv.load_dotenv(dotenv_path=".env")
 reflection = dict(recompute_repr3d=True, mask_index=dict(), cutted_childs=dict(), tris_rg=dict())
-from src.props import TAGDB, colormap, rconn, cols, rmasks, ColorMap, zone_scopes, gsheet_spec
+from src.props import TAGDB, colormap, rconn, cols, rmasks, ColorMap, zone_scopes, gsheet_spec, PANEL_AREA,MIN_CUT
 
 from fastapi import FastAPI, UploadFile
 from starlette.responses import FileResponse, HTMLResponse
@@ -162,7 +162,7 @@ class CompoundPanel(AGroup):
         props_table[self.uuid].set(dict(props))'''
 
 
-def solve_triangles(triangles, names, colors, mask, areas, area_exp=lambda val: round(val*1e-6, 4)):
+def solve_triangles(triangles, names, colors, mask, areas, area_exp=lambda val: round(val*1e-6, 4), min_cut_exp=lambda val: round(val*1e-6, 4)<MIN_CUT):
     reflection["tri_items"] = dict()
     reflection["tris"] = []
     for i, j in enumerate(reflection['ix']):
@@ -200,6 +200,8 @@ def solve_triangles(triangles, names, colors, mask, areas, area_exp=lambda val: 
         props_table[uuid]["pair_name"] = pair_name
         props_table[uuid]["pair_index"] = uuid[-1]
         props_table[uuid]["area"] = area_exp(areas[i][0]['area'])
+        props_table[uuid]["min_cut"] = min_cut_exp(areas[i][0]['area'])
+        props_table[uuid]["min_cut_limit"] = M
         # ADD PAIRS!
 
         if uuid not in reflection["tri_items"].keys():
@@ -209,13 +211,11 @@ def solve_triangles(triangles, names, colors, mask, areas, area_exp=lambda val: 
                 pan = CompoundPanel(uuid=uuid, name=uuid,
                                     _endpoint="triangle_handle/" + uuid,
                                     )
-                # pan.controls = props_table[uuid]
+
                 pan._endpoint = "triangle_handle/" + uuid
-                # reflection["cutted_childs"][uuid]=set()
+
                 for k, pts in enumerate(ppp):
-                    # mask_db.index_map.append(i)
-                    # prt=Part(i+k, mask_db)
-                    # prt.set('self_uuid', uuid + f"_{k + 1}")
+
                     part_uuid = uuid + f"_{k + 1}"
 
                     for key, v in reflection['data'][j].items():
@@ -226,42 +226,34 @@ def solve_triangles(triangles, names, colors, mask, areas, area_exp=lambda val: 
                         else:
                             props_table.set_column_item(key, part_uuid, v)
                     props_table[part_uuid]['cut']=1
-                    # new_props = dict(props_table[uuid])
-                    # d=dict(new_props)
-                    # new_props["name"]=uuid + f"_{k + 1}"
 
-                    # props_table.add_column("mount", default=0,column_type=int)
-                    # mnt=0
-                    # reflection["cutted_childs"][uuid].add(uuid + f"_{k + 1}")
                     try:
-                        # props_table[uuid + f"_{k + 1}"].set(new_props)
-                        # props_table.columns["mount"][uuid + f"_{k + 1}"]=mnt
+
 
                         props_table.columns["pair_name"][uuid + f"_{k + 1}"] = pair_name
                         props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
                         props_table.columns["area"][uuid + f"_{k + 1}"]  = area_exp(areas[i][k]['area'])
-
+                        props_table.columns["min_cut"][uuid + f"_{k + 1}"] = min_cut_exp(areas[i][k]['area'])
                     except:
-                        # props_table[uuid + f"_{k + 1}"].set(new_props)
-                        # props_table.columns["mount"][uuid + f"_{k + 1}"] = mnt
+
                         props_table.columns["pair_name"][uuid + f"_{k + 1}"] = pair_name
                         props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
                         props_table.columns["area"][uuid + f"_{k + 1}"]  = area_exp(areas[i][k]['area'])
+                        props_table.columns["min_cut"][uuid + f"_{k + 1}"] = min_cut_exp(areas[i][k]['area'])
 
-                    #trii = Triangle(*pts)
 
-                    res = earcut.flatten([pts])# trii.triangulate()
+                    res = earcut.flatten([pts])
                     _tess = earcut.earcut(res['vertices'], res['holes'], res['dimensions'])
 
                     geom = MeshData(vertices=pts, indices=np.array(_tess, dtype=int).reshape((len(_tess) // 3, 3)).tolist()).create_buffer()
                     panel = PanelMesh(uuid=uuid + f"_{k + 1}", name=uuid + f"_{k + 1}", geometry=geom,
                             _endpoint="triangle_handle/" + uuid + f"_{k + 1}")
 
-                    # props_table["name"][uuid + f"_{k + 1}"] = uuid + f"_{k + 1}"
+
                     panel.controls = props_table[uuid + f"_{k + 1}"]
                     panel._endpoint = "triangle_handle/" + uuid + f"_{k + 1}"
                     reflection["tris"].append(props_table[uuid + f"_{k + 1}"])
-                    # pan.__setattr__(f"part{k + 1}", panel)
+
                     pan.add(panel)
 
                     reflection["tri_items"][part_uuid] = panel

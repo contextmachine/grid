@@ -22,7 +22,8 @@ else:
 sets.rconn = rconn
 rmasks = sets.Hdict(f"{PROJECT}:{BLOCK}:{ZONE}:masks")
 cols = dict(sets.Hdict(f"{PROJECT}:colors"))
-
+PANEL_AREA=0.12
+MIN_CUT=PANEL_AREA/3
 base_gsh=json.loads("""{
   "sheet_id": "150p5C3tNDHt5KJylrcpwLpK0Wrgf6zjZDgFKL5vZypA",
   "main_sheet_range": "SW_L2_test!A1",
@@ -56,9 +57,11 @@ base_gsh=json.loads("""{
   ],
   "enable": true
 }""")
-gsheet_spec=sets.Hset(f"{PROJECT}:gsheet")
+if os.getenv("TEST_DEPLOYMENT")=="1":
+    gsheet_spec=sets.Hset(f"{PROJECT}:gsheet_test")
 
-
+else:
+    gsheet_spec = sets.Hset(f"{PROJECT}:gsheet")
 zone_scopes=sets.Hdict(f"{PROJECT}:{BLOCK}:zone_scopes")
 class ColorMap(dict):
     def __init__(self, *args, hset_key=f"{PROJECT}:colors", **kwargs):
@@ -159,6 +162,7 @@ class SolvedTagColumn(ColumnType):
         vl = self[v]
 
         return default if vl is None else vl
+
 
 
 class PanelsTagDB(TagDB):
