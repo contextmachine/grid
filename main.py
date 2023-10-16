@@ -126,7 +126,6 @@ itm2 = []
 
 arr = np.asarray(tri_cen).reshape((len(tri_cen), 3))
 
-from colorama import Fore, Back, Style
 
 
 def solve_kd(new_data):
