@@ -15,6 +15,9 @@ httpx="*"
 httplib2="*"
 google-api-python-client="*"
 google-auth="*"
+colorama = "^0.4.6"
+pyopenssl = "^23.2.0"
+google-api = "^0.1.12"
 
 
 [build-system]

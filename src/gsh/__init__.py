@@ -1,5 +1,7 @@
 import dataclasses
+import datetime
 import os
+import time
 import typing
 
 import httplib2
@@ -7,12 +9,12 @@ from googleapiclient.discovery import build
 
 from oauth2client.service_account import ServiceAccountCredentials
 import dotenv
-
+import multiprocess
 dotenv.load_dotenv(".env")
 
 import json
 from collections import Counter
-
+from termcolor import colored,cprint
 
 
 def get_service_sacc():
@@ -67,6 +69,8 @@ def _pair_stats(data, key='arch_type',**kwargs):
 
 
 # https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/update
+def now(sep="T",domain='hours'):
+    return datetime.datetime.now().isoformat(sep=sep,timespec=domain)
 
 
 def update_sheet(data, sheet_range, sheet_id=os.getenv("SHEET_ID")):
@@ -102,7 +106,7 @@ class GoogleSheetApiManagerWrite:
     def from_dict(cls, dct):
 
         return cls(**dct)
-
+import threading as th
 @dataclasses.dataclass
 class GoogleSheetApiManagerState:
     sheet_id: str
@@ -141,6 +145,8 @@ class GoogleSheetApiManager:
                 enable=enable
 
             )
+            self._data=[]
+
 
     def update_state(self, state: GoogleSheetApiManagerState):
         self.state = state
@@ -158,16 +164,22 @@ class GoogleSheetApiManager:
             body={'values': data}).execute()
 
 
-    def update_all(self, data):
-        import threading as th
-        if self.state.enable:
-            data_ = [dict(list(i) + [("name", i.index)]) for i in data]
+    def update_all(self, data, sleep=0):
 
-            def proc():
-                update_sheet(list(self.resort_table(data_)), sheet_range=self.state.main_sheet_range)
-                for write in self.state.writes:
-                    update_sheet(pair_stats(data_, key=write.key, mask=write.mask, sep=write.sep), sheet_range=write.sheet_range)
-                print("google sheet updated!")
 
-            thread = th.Thread(target=proc)
-            thread.start()
+                    _data = [dict(list(i) + [("name", i.index)]) for i in data]
+                    try:
+
+                        update_sheet(list(self.resort_table(_data)), sheet_range=self.state.main_sheet_range)
+
+                        for write in self.state.writes:
+                            time.sleep(sleep)
+                            update_sheet(pair_stats(_data, key=write.key, mask=write.mask, sep=write.sep),sheet_range=write.sheet_range)
+                        print(f"[{colored(now(sep=' '), 'light_grey')}] {colored('writing to gsheet success!', 'green')}")
+
+                    except Exception as e:
+                        print(f"[{colored(now(sep=' '), 'light_grey')}] {colored(str(e), 'red')}")
+
+                        print(_data[0])
+                        time.sleep(10)
+                        self.update_all(data, sleep=1)

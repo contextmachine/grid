@@ -1,11 +1,16 @@
 import dataclasses
+import datetime
 import gzip
 import json
 import pickle
+import sys
+import time
+import threading as th
 from collections import Counter
 import typing
-typing.TYPE_CHECKING=False
-TYPE_CHECKING=False
+
+typing.TYPE_CHECKING = False
+TYPE_CHECKING = False
 import requests
 import uvicorn
 import os
@@ -14,10 +19,11 @@ import numpy as np
 import pandas as pd
 from earcut import earcut
 from mmcore.base.geom import MeshData
+from src.state import StateManager
 
 dotenv.load_dotenv(dotenv_path=".env")
 reflection = dict(recompute_repr3d=True, mask_index=dict(), cutted_childs=dict(), tris_rg=dict())
-from src.props import TAGDB, colormap, rconn, cols, rmasks, ColorMap, zone_scopes, gsheet_spec, PANEL_AREA,MIN_CUT
+from src.props import TAGDB, colormap, rconn, cols, rmasks, ColorMap, zone_scopes, gsheet_spec, PANEL_AREA, MIN_CUT
 
 from fastapi import FastAPI, UploadFile
 from starlette.responses import FileResponse, HTMLResponse
@@ -28,23 +34,28 @@ from src.cxm_props import BLOCK, PROJECT, ZONE
 from mmcore.geom.materials import ColorRGB
 from mmcore.base import A, AGroup, AMesh
 
-from mmcore.base.sharedstate import serve,debug_properties
+from mmcore.base.sharedstate import serve, debug_properties
 from mmcore.base.registry import adict, idict
 
 from mmcore.base import ALine, A, APoints, AGroup
 import rich
+
 rich.print(dict(os.environ))
 
+import colorama
 
 print(TAGDB)
 from src.pairs import solve_pairs_stats
 
+update_flag = False
 
 # This Api provides an extremely flexible way of updating data. You can pass any part of the parameter dictionary
 # structure, the parameters will be updated recursively and only the part of the graph affected by the change
 # will be recalculated.
 reflection["tri_items"] = dict()
 reflection["tris"] = list()
+reflection['redis_cache'] = False
+
 A.__gui_controls__.config.address = os.getenv("MMCORE_ADDRESS")
 A.__gui_controls__.config.api_prefix = os.getenv("MMCORE_APPPREFIX")
 
@@ -84,11 +95,14 @@ def prettify(dt, buff=None):
             "block": block,
             "zone": zone
         }
+
+
 def get_zone_scopes():
     return zone_scopes[ZONE]
 
 
-servreq=get_zone_scopes()
+servreq = get_zone_scopes()
+
 
 def set_static_build_data(key, data, conn):
     return conn.set(key, gzip.decompress(json.dumps(data).encode()))
@@ -97,12 +111,13 @@ def set_static_build_data(key, data, conn):
 def get_static_build_data(key, conn):
     return json.loads(gzip.decompress(conn.get(key)).decode())
 
-#build = json.loads(gzip.decompress(rconn.get(f"{PROJECT}:{BLOCK}:{ZONE}:build")).decode())
+
+# build = json.loads(gzip.decompress(rconn.get(f"{PROJECT}:{BLOCK}:{ZONE}:build")).decode())
 #
-#cut, tri, tri_cen, tri_names = build['cut'], build['cutted_tri'], build['centers'], build['names']
-CONTOUR_SERVER_URL=f'{os.getenv("CONTOUR_SERVER_URL")}/{BLOCK}/contours-merged'
+# cut, tri, tri_cen, tri_names = build['cut'], build['cutted_tri'], build['centers'], build['names']
+CONTOUR_SERVER_URL = f'{os.getenv("CONTOUR_SERVER_URL")}/{BLOCK}/contours-merged'
 print(servreq)
-build = requests.post(CONTOUR_SERVER_URL,json=dict(names=servreq)).json()
+build = requests.post(CONTOUR_SERVER_URL, json=dict(names=servreq)).json()
 
 cut, tri, tri_cen, tri_names, ar = build['mask'], build['shapes'], build['centers'], build['names'], build['props']
 projmask = cut
@@ -110,6 +125,8 @@ projmask = cut
 itm2 = []
 
 arr = np.asarray(tri_cen).reshape((len(tri_cen), 3))
+
+from colorama import Fore, Back, Style
 
 
 def solve_kd(new_data):
@@ -126,12 +143,68 @@ def solve_kd(new_data):
     reflection["ix"] = ix
     reflection["recompute_repr3d"] = True
 
-google_sheet_manager=GoogleSheetApiManager(GoogleSheetApiManagerState.from_dict(dict(gsheet_spec[BLOCK][ZONE])))
+
+class GridStateManager(StateManager):
+    def __init__(self, procs, sleep_time=10):
+        super().__init__(procs, sleep_time=sleep_time)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        super().__exit__(exc_type, exc_val, exc_tb)
+        if (exc_type, exc_val, exc_tb) != (None, None, None):
+            sys.exit(0)
+
+
+from termcolor import colored, cprint
+
+
+def now(sep="T", domain='hours'):
+    return datetime.datetime.now().isoformat(sep=sep, timespec=domain)
+
+
+def on_shutdown():
+    print(f"[{colored(now(sep=' '), 'light_grey')}] {colored('... writing to redis', 'yellow')}")
+    rconn.set(TAGDB, pickle.dumps(props_table))
+    print(f"[{colored(now(sep=' '), 'light_grey')}] {colored(' writing to redis success!', 'green')}")
+    return True
+
+
+def create_redis_snapshot():
+    print(f"[{colored(now(sep=' '), 'light_grey')}] {colored('... writing snapshot to redis', 'yellow')}")
+    snaptime = now(sep='T')
+    k = f"{TAGDB}_snapshot:{snaptime}"
+    rconn.set(k, gzip.compress(pickle.dumps(props_table), compresslevel=9))
+
+    print(f"[{colored(now(sep=' '), 'light_grey')}] {colored('writing snapshot to redis success!', 'green')}")
+    print(f"[{colored(now(sep=' '), 'light_grey')}] {colored(k, 'cyan')}")
+
+
+google_sheet_manager = GoogleSheetApiManager(GoogleSheetApiManagerState.from_dict(dict(gsheet_spec[BLOCK][ZONE])))
+
+
+def gsheet_updater():
+    print(f"[{colored(now(sep=' '), 'light_grey')}] {colored('... writing to gsheet', 'yellow')}")
+
+    google_sheet_manager.update_all(reflection['tris'])
+
 
 class GoogleSupportRootGroup(MaskedRootGroup):
     def make_cache(self):
+        global appmanager
         super().make_cache()
-        google_sheet_manager.update_all(reflection["tris"])
+        appmanager.update()
+        # snapshot_time=datetime.datetime.now().isoformat(
+        #    sep=" ", timespec='hours')
+        # if reflection['redis_cache']:
+        #    on_shutdown()
+        # rconn.set(
+        #    f"{TAGDB}_snapshot:{snapshot_time}", gzip.compress(pickle.dumps(props_table), compresslevel=9))
+
+        # print(f"Save tagDB snapshot at {snapshot_time}")
+        # on_shutdown()
+        # sys.getsizeof(reflection)
+        # sys.getsizeof(google_sheet_manager)
+        # google_sheet_manager.update_all(reflection["tris"])
+
 
 class PanelMesh(AMesh):
 
@@ -153,6 +226,11 @@ class PanelMesh(AMesh):
         pass
 
 
+@dataclasses.dataclass(slots=True)
+class RedisDumpChangeEvent:
+    value: bool = False
+
+
 class CompoundPanel(AGroup):
     '''@property
     def properties(self):
@@ -162,7 +240,8 @@ class CompoundPanel(AGroup):
         props_table[self.uuid].set(dict(props))'''
 
 
-def solve_triangles(triangles, names, colors, mask, areas, area_exp=lambda val: round(val*1e-6, 4), min_cut_exp=lambda val: round(val*1e-6, 4)<MIN_CUT):
+def solve_triangles(triangles, names, colors, mask, areas, area_exp=lambda val: round(val * 1e-6, 4),
+                    min_cut_exp=lambda val: round(val * 1e-6, 4) < MIN_CUT):
     reflection["tri_items"] = dict()
     reflection["tris"] = []
     for i, j in enumerate(reflection['ix']):
@@ -174,7 +253,7 @@ def solve_triangles(triangles, names, colors, mask, areas, area_exp=lambda val: 
         tag = f'{reflection["data"][j]["arch_type"]}-{reflection["data"][j]["eng_type"]}'
         if tag not in colors:
             colors[tag] = np.random.randint(30, 230, 3).tolist()
-        ppp =triangles[i]
+        ppp = triangles[i]
 
         uuid = names[i].replace(":", "_")
         splitted_uuid = uuid.split("_")
@@ -190,7 +269,7 @@ def solve_triangles(triangles, names, colors, mask, areas, area_exp=lambda val: 
                     props_table.set_column_item(k, uuid, v)
             else:
                 props_table.set_column_item(k, uuid, v)
-                #column[uuid] = v
+                # column[uuid] = v
 
         props_table[uuid]["cut"] = mask[i]
         props_table[uuid]["cut_mask"] = mask[i]
@@ -201,7 +280,7 @@ def solve_triangles(triangles, names, colors, mask, areas, area_exp=lambda val: 
         props_table[uuid]["pair_index"] = uuid[-1]
         props_table[uuid]["area"] = area_exp(areas[i][0]['area'])
         props_table[uuid]["min_cut"] = min_cut_exp(areas[i][0]['area'])
-        props_table[uuid]["min_cut_limit"] = M
+
         # ADD PAIRS!
 
         if uuid not in reflection["tri_items"].keys():
@@ -225,30 +304,28 @@ def solve_triangles(triangles, names, colors, mask, areas, area_exp=lambda val: 
                                 props_table.set_column_item(key, part_uuid, v)
                         else:
                             props_table.set_column_item(key, part_uuid, v)
-                    props_table[part_uuid]['cut']=1
+                    props_table[part_uuid]['cut'] = 1
 
                     try:
 
-
                         props_table.columns["pair_name"][uuid + f"_{k + 1}"] = pair_name
                         props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
-                        props_table.columns["area"][uuid + f"_{k + 1}"]  = area_exp(areas[i][k]['area'])
+                        props_table.columns["area"][uuid + f"_{k + 1}"] = area_exp(areas[i][k]['area'])
                         props_table.columns["min_cut"][uuid + f"_{k + 1}"] = min_cut_exp(areas[i][k]['area'])
                     except:
 
                         props_table.columns["pair_name"][uuid + f"_{k + 1}"] = pair_name
                         props_table.columns["pair_index"][uuid + f"_{k + 1}"] = uuid[-1]
-                        props_table.columns["area"][uuid + f"_{k + 1}"]  = area_exp(areas[i][k]['area'])
+                        props_table.columns["area"][uuid + f"_{k + 1}"] = area_exp(areas[i][k]['area'])
                         props_table.columns["min_cut"][uuid + f"_{k + 1}"] = min_cut_exp(areas[i][k]['area'])
-
 
                     res = earcut.flatten([pts])
                     _tess = earcut.earcut(res['vertices'], res['holes'], res['dimensions'])
 
-                    geom = MeshData(vertices=pts, indices=np.array(_tess, dtype=int).reshape((len(_tess) // 3, 3)).tolist()).create_buffer()
+                    geom = MeshData(vertices=pts, indices=np.array(_tess, dtype=int).reshape(
+                        (len(_tess) // 3, 3)).tolist()).create_buffer()
                     panel = PanelMesh(uuid=uuid + f"_{k + 1}", name=uuid + f"_{k + 1}", geometry=geom,
-                            _endpoint="triangle_handle/" + uuid + f"_{k + 1}")
-
+                                      _endpoint="triangle_handle/" + uuid + f"_{k + 1}")
 
                     panel.controls = props_table[uuid + f"_{k + 1}"]
                     panel._endpoint = "triangle_handle/" + uuid + f"_{k + 1}"
@@ -265,11 +342,11 @@ def solve_triangles(triangles, names, colors, mask, areas, area_exp=lambda val: 
                 # props_table["name"][uuid] = uuid
                 res = earcut.flatten(ppp)  # trii.triangulate()
                 _tess = earcut.earcut(res['vertices'], res['holes'], res['dimensions'])
-                #print(ppp)
+                # print(ppp)
                 geom = MeshData(vertices=ppp, indices=np.array(_tess, dtype=int).reshape(
                     (len(_tess) // 3, 3)).tolist()).create_buffer()
 
-                #trii = Triangle(*ppp[0])
+                # trii = Triangle(*ppp[0])
 
                 pan = PanelMesh(uuid=uuid, name=uuid, geometry=geom,
                                 _endpoint="triangle_handle/" + uuid)
@@ -284,8 +361,8 @@ def solve_triangles(triangles, names, colors, mask, areas, area_exp=lambda val: 
         grp = RootGroup(uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels", name=f"{BLOCK} {ZONE} panels".upper())
         grp.scale(0.001, 0.001, 0.001)
 
+    idict[f"{PROJECT}_{BLOCK}_{ZONE}_panels"]["__children__"] = set(reflection['tri_items'].keys())
 
-    idict[f"{PROJECT}_{BLOCK}_{ZONE}_panels"]["__children__"]=set(reflection['tri_items'].keys())
 
 def reload_datapoints(addr=f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:datapoints"):
     _dt = rconn.get(addr)
@@ -293,30 +370,6 @@ def reload_datapoints(addr=f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:datapoi
         if isinstance(_dt, bytes):
             _dt = _dt.decode()
         solve_kd(json.loads(_dt))
-def init():
-    _dt = rconn.get(f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:datapoints")
-    if _dt is not None:
-        if isinstance(_dt, bytes):
-            _dt = _dt.decode()
-        solve_kd(json.loads(_dt))
-
-    solve_triangles(tri, tri_names, cols, cut, ar)
-
-
-    pgrp = GoogleSupportRootGroup(uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut",
-                           name=f"{BLOCK} {ZONE}".upper(),
-
-                           owner_uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels")
-    # pgrp.recompute_mask()
-    pgrp.scale(0.001, 0.001, 0.001)
-    # solve_pairs_stats(reflection=reflection,props=props_table)
-    print(pgrp.uuid)
-    pgrp.mask_name = "cut"
-
-def on_shutdown():
-    print("Grace Shutdown")
-    rconn.set(TAGDB, pickle.dumps(props_table))
-    return rconn.set(TAGDB, pickle.dumps(props_table))
 
 
 @serve.app.get("/table")
@@ -398,7 +451,6 @@ async def stats_pairs():
     return reflection["pairs_stats"]
 
 
-
 @serve.app.get("/props_table")
 def pt():
     with open("props_table.pkl", 'wb') as f:
@@ -459,6 +511,7 @@ def dump_tagdb():
     on_shutdown()
     return TAGDB
 
+
 @serve.app.get("/dupdate_contours")
 def dump_tagdb():
     on_shutdown()
@@ -471,30 +524,34 @@ def where_table(data: dict):
     tab = pd.DataFrame([dict(list(_i) + [("name", _i.index)]) for _i in list(filter(rul, reflection["tris"]))])
     tab.to_csv("table.csv")
     return FileResponse("table.csv", filename="table.csv", media_type="application/csv")
+
+
 @serve.app.get("/update-contours")
 def upd_cont():
     print(get_zone_scopes())
-    build = requests.post(CONTOUR_SERVER_URL,json=dict(names=servreq)).json()
+    build = requests.post(CONTOUR_SERVER_URL, json=dict(names=servreq)).json()
 
     cut, tri, tri_cen, tri_names, ar = build['mask'], build['shapes'], build['centers'], build['names'], build['props']
-    solve_triangles(tri, tri_names, cols,cut, ar)
+    solve_triangles(tri, tri_names, cols, cut, ar)
     adict[f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut"].recompute_mask()
     return "Ok"
+
+
 @serve.app.get("/update-types")
 def upd_types():
     print(get_zone_scopes())
-    build = requests.post(CONTOUR_SERVER_URL,json=dict(names=servreq)).json()
+    build = requests.post(CONTOUR_SERVER_URL, json=dict(names=servreq)).json()
 
     cut, tri, tri_cen, tri_names, ar = build['mask'], build['shapes'], build['centers'], build['names'], build['props']
     reload_datapoints()
-    solve_triangles(tri, tri_names, cols,cut, ar)
+    solve_triangles(tri, tri_names, cols, cut, ar)
     adict[f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut"].recompute_mask()
     return "Ok"
 
+
 @serve.app.post("/zone-scopes")
 def update_zone_scopes(data: list[str]):
-
-    zone_scopes[ZONE]=data
+    zone_scopes[ZONE] = data
     for d in data:
         if d not in servreq:
             servreq.append(d)
@@ -509,12 +566,23 @@ def update_zone_scopes(data: list[str]):
         ZONE: zone_scopes[ZONE]
     }
 
+
 @serve.app.get("/zone-scopes")
 def get_zone_scopes():
-
     return {
         ZONE: zone_scopes[ZONE]
     }
+
+
+@serve.app.post("/redis_cache")
+async def redis_dumps(data: RedisDumpChangeEvent):
+    reflection['redis_cache'] = data.value
+    return reflection['redis_cache']
+
+
+@serve.app.get("/redis_cache")
+async def redis_cache_get():
+    return reflection['redis_cache']
 
 
 @serve.app.get("/gsheet")
@@ -549,14 +617,13 @@ async def add_gsheet_writes(data: list[GoogleSheetApiManagerWrite]):
 @serve.app.post("/gsheet/writes")
 async def post_gsheet_writes(data: list[GoogleSheetApiManagerWrite]):
     google_sheet_manager.state.writes = data
-    gsheet_spec[BLOCK][ZONE]=dataclasses.asdict(google_sheet_manager.state)
+    gsheet_spec[BLOCK][ZONE] = dataclasses.asdict(google_sheet_manager.state)
     google_sheet_manager.update_all(reflection["tris"])
     return google_sheet_manager.state.writes
 
+
 @serve.app.get("/gsheet/update_data_in_google_sheet_table")
 async def gsheet_update():
-
-
     if google_sheet_manager.state.enable:
         try:
             google_sheet_manager.update_all(reflection["tris"])
@@ -577,17 +644,39 @@ else:
     aapp = FastAPI()
 aapp.mount(os.getenv("MMCORE_APPPREFIX"), serve.app)
 
-
-#import threading as th
-#def app_thread():
+# import threading as th
+# def app_thread():
 #    uvicorn.run("main:aapp", host='0.0.0.0', port=7711)
-debug_properties['target']=f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut"
-#app_th = th.Thread(target=app_thread)
-#init()
-#app_th.start()
-#ttg = TrisRGroup(uuid="query_object", name="query_object", _endpoint="where/query_object", rule_data={"cut": 0})
-#ttg.scale(0.001, 0.001, 0.001)
+debug_properties['target'] = f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut"
+# app_th = th.Thread(target=app_thread)
+# init()
+# app_th.start()
+# ttg = TrisRGroup(uuid="query_object", name="query_object", _endpoint="where/query_object", rule_data={"cut": 0})
+# ttg.scale(0.001, 0.001, 0.001)
+
 if __name__ == "__main__":
-    init()
-    print(os.getenv("MMCORE_ADDRESS")+"/"+os.getenv("MMCORE_APPPREFIX"))
-    uvicorn.run("main:aapp", host='0.0.0.0', port=7711)
+
+    with GridStateManager((gsheet_updater, on_shutdown, create_redis_snapshot), sleep_time=25) as appmanager:
+        def init():
+            _dt = rconn.get(f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:datapoints")
+            if _dt is not None:
+                if isinstance(_dt, bytes):
+                    _dt = _dt.decode()
+                solve_kd(json.loads(_dt))
+
+            solve_triangles(tri, tri_names, cols, cut, ar)
+
+            pgrp = GoogleSupportRootGroup(uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut",
+                                          name=f"{BLOCK} {ZONE}".upper(),
+                                          owner_uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels")
+            # pgrp.recompute_mask()
+            pgrp.scale(0.001, 0.001, 0.001)
+            # solve_pairs_stats(reflection=reflection,props=props_table)
+            print(pgrp.uuid)
+            pgrp.mask_name = "cut"
+
+
+        init()
+        print(os.getenv("MMCORE_ADDRESS") + "/" + os.getenv("MMCORE_APPPREFIX"))
+
+        uvicorn.run("main:aapp", host='0.0.0.0', port=7711)

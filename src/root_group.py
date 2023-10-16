@@ -1,4 +1,5 @@
 import datetime
+import time
 
 import ujson
 from mmcore.base import AGroup, adict, idict
@@ -53,19 +54,23 @@ class MaskedRootGroup(RootGroup):
     _children_uuids = None
     cache=None
     def props_update(self, uuids: list[str], props: dict):
-        recompute_mask = False
+        #recompute_mask = False
         print(props)
-        if self.mask_name in props.keys():
-            recompute_mask = True
+        s=time.time()
+        #if self.mask_name in props.keys():
+            #recompute_mask = True
 
         ans = super().props_update(uuids, props)
-        if recompute_mask:
-            self.recompute_mask()
+        #if recompute_mask:
+            #self.recompute_mask()
         self.make_cache()
+        m,sec = divmod(time.time()-s,60)
+        print(f'updated at {m} min, {sec} sec')
         return ans
 
     def make_cache(self):
         sup=super()
+
         def asyncache():
             #print("caching...")
             self.cache = sup.root()
@@ -73,6 +78,7 @@ class MaskedRootGroup(RootGroup):
         asyncache()
         #self._th=Thread(target=asyncache)
         #self._th.start()
+
 
     def root(self, shapes=None, dumps=False):
         if self.cache is None:

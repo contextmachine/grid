@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import pickle
@@ -58,11 +59,11 @@ base_gsh=json.loads("""{
   "enable": true
 }""")
 if os.getenv("TEST_DEPLOYMENT")=="1":
-    gsheet_spec=sets.Hset(f"{PROJECT}:gsheet_test")
+    gsheet_spec=sets.Hset(f"{PROJECT}:gsheet_test").todict()
 
 else:
-    gsheet_spec = sets.Hset(f"{PROJECT}:gsheet")
-zone_scopes=sets.Hdict(f"{PROJECT}:{BLOCK}:zone_scopes")
+    gsheet_spec = sets.Hset(f"{PROJECT}:gsheet").todict()
+zone_scopes=dict(sets.Hdict(f"{PROJECT}:{BLOCK}:zone_scopes"))
 class ColorMap(dict):
     def __init__(self, *args, hset_key=f"{PROJECT}:colors", **kwargs):
         self._hset = sets.Hdict(hset_key)
@@ -167,8 +168,10 @@ class SolvedTagColumn(ColumnType):
 
 class PanelsTagDB(TagDB):
     def __getstate__(self):
-        state = super().__getstate__()
+
+        state = copy.deepcopy(super().__getstate__())
         state["columns"]["tag"] = dict()
+        #self.columns['tag'] = SolvedTagColumn(self.uuid)
         return state
 
     def __setstate__(self, state):
