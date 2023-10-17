@@ -42,7 +42,7 @@ import rich
 
 rich.print(dict(os.environ))
 
-import colorama
+
 
 print(TAGDB)
 from src.pairs import solve_pairs_stats
