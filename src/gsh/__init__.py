@@ -34,7 +34,7 @@ def resort(data, ks):
     for item in data:
         yield [item.get(k) for k in ks]
 
-def pair_stats(data, key='arch_type', mask='cut', sep=" "):
+def pair_stats(data, key='arch_type', mask='cut', sep=" ", optional=None):
     dct = dict()
     iterkey = not isinstance(key, str)
     for item in data:
@@ -43,7 +43,10 @@ def pair_stats(data, key='arch_type', mask='cut', sep=" "):
         if projmask != 2:
             pair_name =  spited_name[3] + "_" + spited_name[4]
             if pair_name not in dct:
-                dct[pair_name] = ""
+                if optional is not None:
+                    dct[pair_name] = f'{item["Approved_zone"]}'
+                else:
+                    dct[pair_name] = ""
 
             if iterkey:
                     for k in key:
@@ -66,6 +69,28 @@ def _pair_stats(data, key='arch_type',**kwargs):
 
     return list(Counter(dct.values()).items())
 
+
+def approved_zone_stats(data, key='tag', mask='cut', sep=" ", optional=None):
+    dct = dict()
+    iterkey = not isinstance(key, str)
+    for item in data:
+        spited_name = item["name"].split("_")
+        projmask = item[mask]
+        if projmask != 2:
+            pair_name = spited_name[3] + "_" + spited_name[4]
+            if pair_name not in dct:
+                if optional is not None:
+                    dct[pair_name] = f'{item["Approved_zone"]}'
+                else:
+                    dct[pair_name] = ""
+
+            if iterkey:
+                for k in key:
+                    dct[pair_name] += f'{sep}{item[k]}'
+
+            else:
+                dct[pair_name] += f'{sep}{item[key]}'
+    return list(Counter(dct.values()).items())
 
 
 # https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/update
@@ -171,7 +196,17 @@ class GoogleSheetApiManager:
                     try:
 
                         update_sheet(list(self.resort_table(_data)), sheet_range=self.state.main_sheet_range)
+                        wi=iter(self.state.writes)
+                        wr=next(wi)
+                        while True:
+                            try:
+                                if wr.key == "tag":
 
+                                    update_sheet(pair_stats(_data, key=wr.key, mask=wr.mask, sep=wr.sep, optional="Approved_zone"), sheet_range= f"{wr.sheet_range.split('!')[0]}!K2")
+                                    break
+                                wr=next(wi)
+                            except StopIteration as err:
+                                break
                         for write in self.state.writes:
                             time.sleep(sleep)
                             update_sheet(pair_stats(_data, key=write.key, mask=write.mask, sep=write.sep),sheet_range=write.sheet_range)
