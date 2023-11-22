@@ -539,9 +539,9 @@ def where_table(data: dict):
 @serve.app.get("/update-contours")
 def upd_cont():
 
-    zs=dict(zone_scopes_redis[ZONE])
-    print(get_zone_scopes())
-    build = requests.post(CONTOUR_SERVER_URL, json=dict(names= zs)).json()
+    zs=zone_scopes_redis[ZONE]
+    print(get_zone_scopes(),zs)
+    build = requests.post(CONTOUR_SERVER_URL, json=dict(names=zs)).json()
 
     cut, tri, tri_cen, tri_names, ar = build['mask'], build['shapes'], build['centers'], build['names'], build['props']
     solve_triangles(tri, tri_names, cols, cut, ar)
@@ -585,12 +585,18 @@ def get_zone_scopes():
 
 @serve.app.post("/zone-scopes/add")
 def add_zone_scopes(value: list[str]):
-    zs=zone_scopes_redis[ZONE]
-    for v in value:
-        if v not in zs:
-            zs.append(v)
-    zone_scopes_redis[ZONE]=zs
-    return zone_scopes_redis[ZONE]
+    zs = zone_scopes_redis[ZONE]
+    if not isinstance(value,str):
+
+        for i in value:
+            if i not in zs:
+                zs.append(i)
+        zone_scopes_redis[ZONE]=zs
+    else:
+        if value not in zs:
+            zs.append(value)
+        zone_scopes_redis[ZONE] = zs
+        return zone_scopes_redis[ZONE]
 
 @serve.app.post("/redis_cache")
 async def redis_dumps(data: RedisDumpChangeEvent):

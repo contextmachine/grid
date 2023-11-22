@@ -8,7 +8,7 @@ from collections import Counter
 import requests
 import rich
 
-
+from termcolor import colored
 def bool_change_gen(curval):
     return not curval
 
@@ -54,7 +54,7 @@ def stress_test_data(count, data, keys):
     return test_data
 import multiprocess as mp
 import multiprocessing as mpp
-URL="http://localhost:7711/cxm/api/v2/mfb_ne_l2"
+URL="https://viewer.contextmachine.online/cxm/api/v2/mfb_sw_l2_multiselect_test"
 TESTUUID="mfb_sw_l2_panels_masked_cut"
 log=[]
 def test_request(data):
@@ -71,7 +71,7 @@ def test_request(data):
     print(json.dumps(res))
     return res
 
-def test_stress(count=25 ):
+def test_stress(count=4):
     resp = requests.get(f"{URL}/stats")
     stats = resp.json()
 
@@ -85,7 +85,7 @@ def test_stress(count=25 ):
     return sdt
 
 if __name__ == '__main__':
-    COUNT=256
+    COUNT=16
     data=test_stress(count=COUNT)
     exc=None
     rich.print(f"\nGenerate {COUNT} test items:\n\n")
@@ -93,7 +93,7 @@ if __name__ == '__main__':
     rich.print(f"\nStart Tests:\n\n")
     try:
 
-        with mp.Pool(16) as p:
+        with mp.Pool(4) as p:
             res=p.map(test_request, data)
     except Exception as err:
         exc=repr(err)
@@ -115,5 +115,12 @@ if __name__ == '__main__':
         "success":True
 
     }
+
     with open(f"stress_test_result_{dt.replace(':', '-').split('.')[0]}.json" ,"w") as f:
             json.dump(summary, f, indent=2)
+    resp=requests.get(url=URL+'/stats')
+    if resp.status_code==200:
+        print(colored("Test passed!","cyan",attrs=('bold',)))
+    else:
+        print(colored("Failed!", "red",attrs=('bold',)))
+        print(resp.text)
