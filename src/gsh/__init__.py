@@ -44,7 +44,13 @@ def pair_stats(data, key='arch_type', mask='cut', sep=" ", optional=None):
             pair_name =  spited_name[3] + "_" + spited_name[4]
             if pair_name not in dct:
                 if optional is not None:
-                    dct[pair_name] = f'{item["Approved_zone"]}'
+                    if item.get("Approved_zone"):
+
+                        dct[pair_name] = f'{item.get("Approved_zone")}'
+                    elif item.get("approved_zone"):
+                        dct[pair_name] = f'{item.get("approved_zone")}'
+                    else:
+                        dct[pair_name] = ""
                 else:
                     dct[pair_name] = ""
 
@@ -198,6 +204,7 @@ class GoogleSheetApiManager:
                         update_sheet(list(self.resort_table(_data)), sheet_range=self.state.main_sheet_range)
                         wi=iter(self.state.writes)
                         wr=next(wi)
+
                         while True:
                             try:
                                 if wr.key == "tag":
