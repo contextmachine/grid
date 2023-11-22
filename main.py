@@ -23,7 +23,8 @@ from src.state import StateManager
 
 dotenv.load_dotenv(dotenv_path=".env")
 reflection = dict(recompute_repr3d=True, mask_index=dict(), cutted_childs=dict(), tris_rg=dict())
-from src.props import TAGDB, colormap, rconn, cols, rmasks, ColorMap, zone_scopes, gsheet_spec, PANEL_AREA, MIN_CUT
+from src.props import TAGDB, colormap, rconn, cols, rmasks, sets, ColorMap, zone_scopes, gsheet_spec, PANEL_AREA, \
+    MIN_CUT, zone_scopes_redis
 
 from fastapi import FastAPI, UploadFile
 from starlette.responses import FileResponse, HTMLResponse
@@ -42,8 +43,6 @@ import rich
 
 rich.print(dict(os.environ))
 
-
-
 print(TAGDB)
 from src.pairs import solve_pairs_stats
 
@@ -61,7 +60,7 @@ A.__gui_controls__.config.api_prefix = os.getenv("MMCORE_APPPREFIX")
 
 from src.root_group import RootGroup, props_table, MaskedRootGroup
 from src.gsh import GoogleSheetApiManager, GoogleSheetApiManagerEnableEvent, GoogleSheetApiManagerState, \
-    GoogleSheetApiManagerWrite
+    GoogleSheetApiManagerWrite, logtime
 
 
 # props_table = TagDB("mfb_sw_l2_panels")
@@ -101,7 +100,7 @@ def get_zone_scopes():
     return zone_scopes[ZONE]
 
 
-servreq = get_zone_scopes()
+servreq = zone_scopes_redis[ZONE]
 
 
 def set_static_build_data(key, data, conn):
@@ -125,7 +124,6 @@ projmask = cut
 itm2 = []
 
 arr = np.asarray(tri_cen).reshape((len(tri_cen), 3))
-
 
 
 def solve_kd(new_data):
@@ -180,10 +178,26 @@ def create_redis_snapshot():
 google_sheet_manager = GoogleSheetApiManager(GoogleSheetApiManagerState.from_dict(dict(gsheet_spec[BLOCK][ZONE])))
 
 
-def gsheet_updater():
+def gsheet_updater(arg=(40, 10)):
+    sleep, retry = arg[0], arg[1]
     print(f"[{colored(now(sep=' '), 'light_grey')}] {colored('... writing to gsheet', 'yellow')}")
 
-    google_sheet_manager.update_all(reflection['tris'])
+    res = google_sheet_manager.update_all(reflection['tris'])
+    calls = 1
+
+    def retry_caller(result):
+        nonlocal retry, calls
+        if not result:
+            print(logtime(), colored("ERROR", 'red', attrs=("bold",)))
+            for i in range(sleep):
+                time.sleep(1)
+                print(colored(f"retry ({calls}) after {sleep - i} secs.", 'light_grey'), flush=True, end="\r")
+            calls += 1
+            retry -= 1
+            if retry > 0:
+                retry_caller(res.update_all())
+
+    retry_caller(res)
 
 
 class GoogleSupportRootGroup(MaskedRootGroup):
@@ -511,10 +525,7 @@ def dump_tagdb():
     return TAGDB
 
 
-@serve.app.get("/dupdate_contours")
-def dump_tagdb():
-    on_shutdown()
-    return TAGDB
+
 
 
 @serve.app.get("/where/table")
@@ -527,12 +538,15 @@ def where_table(data: dict):
 
 @serve.app.get("/update-contours")
 def upd_cont():
+
+    zs=dict(zone_scopes_redis[ZONE])
     print(get_zone_scopes())
-    build = requests.post(CONTOUR_SERVER_URL, json=dict(names=servreq)).json()
+    build = requests.post(CONTOUR_SERVER_URL, json=dict(names= zs)).json()
 
     cut, tri, tri_cen, tri_names, ar = build['mask'], build['shapes'], build['centers'], build['names'], build['props']
     solve_triangles(tri, tri_names, cols, cut, ar)
     adict[f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut"].recompute_mask()
+
     return "Ok"
 
 
@@ -551,27 +565,32 @@ def upd_types():
 @serve.app.post("/zone-scopes")
 def update_zone_scopes(data: list[str]):
     zone_scopes[ZONE] = data
+    zone_scopes_redis[ZONE] = data
     for d in data:
         if d not in servreq:
             servreq.append(d)
 
-    build = requests.post(CONTOUR_SERVER_URL, json=dict(names=servreq)).json()
+    build = requests.post(CONTOUR_SERVER_URL, json=dict(names= zone_scopes_redis[ZONE])).json()
 
     cut, tri, tri_cen, tri_names, ar = build['mask'], build['shapes'], build['centers'], build['names'], build['props']
     solve_triangles(tri, tri_names, cols, cut, ar)
     adict[f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut"].recompute_mask()
 
-    return {
-        ZONE: zone_scopes[ZONE]
-    }
+    return  zone_scopes_redis[ZONE]
 
 
 @serve.app.get("/zone-scopes")
 def get_zone_scopes():
-    return {
-        ZONE: zone_scopes[ZONE]
-    }
+    return zone_scopes_redis[ZONE]
 
+@serve.app.post("/zone-scopes/add")
+def add_zone_scopes(value: list[str]):
+    zs=zone_scopes_redis[ZONE]
+    for v in value:
+        if v not in zs:
+            zs.append(v)
+    zone_scopes_redis[ZONE]=zs
+    return zone_scopes_redis[ZONE]
 
 @serve.app.post("/redis_cache")
 async def redis_dumps(data: RedisDumpChangeEvent):
@@ -595,6 +614,8 @@ async def post_gsheet_state(data: GoogleSheetApiManagerState):
     gsheet_spec[BLOCK][ZONE] = dataclasses.asdict(google_sheet_manager.state)
     google_sheet_manager.update_all(reflection["tris"])
     return google_sheet_manager.state
+
+
 
 
 @serve.app.post("/gsheet/enabled")
@@ -634,6 +655,19 @@ async def gsheet_update():
             "enable": False
         }}}
 
+@serve.app.get("/gsheet/disable")
+def disable_gsheet():
+    appmanager.pause(0)
+    return {'paused': list(appmanager.paused), 'running': list(set(range(len(appmanager.procs)))-appmanager.paused)}
+@serve.app.get("/gsheet/shedule")
+def shedule_gsheet():
+    appmanager.manual_runs.add(0)
+    return {'paused': list(appmanager.paused), 'running': list(set(range(len(appmanager.procs)))-appmanager.paused)}
+
+@serve.app.get("/gsheet/enable")
+def enable_gsheet():
+    appmanager.resume(0)
+    return {'paused': list(appmanager.paused), 'running': list(set(range(len(appmanager.procs)))-appmanager.paused)}
 
 if os.getenv("TEST_DEPLOYMENT") is None:
     aapp = FastAPI(on_shutdown=[on_shutdown])
@@ -656,6 +690,7 @@ debug_properties['target'] = f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut"
 if __name__ == "__main__":
 
     with GridStateManager((gsheet_updater, on_shutdown, create_redis_snapshot), sleep_time=25) as appmanager:
+
         def init():
             _dt = rconn.get(f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:datapoints")
             if _dt is not None:

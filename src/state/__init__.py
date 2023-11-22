@@ -1,5 +1,6 @@
 import threading as th
 import time
+from queue import Queue
 
 
 class StateManager:
@@ -16,9 +17,9 @@ class StateManager:
         self.procs = procs
         self.update_flag = False
         self.stop_flag = False
-
         self.sleep_time = sleep_time
-
+        self.paused = set()
+        self.manual_runs = set()
         def loop():
 
             while True:
@@ -26,13 +27,24 @@ class StateManager:
                 if self.stop_flag:
                     print("stopping")
                     break
+
                 elif self.update_flag:
                     self.update_flag = False
 
-                    for proc in self.procs:
-                        proc()
+                    for i, proc in enumerate(self.procs):
+                        if i not in self.paused:
+                            proc()
+                            if i in self.manual_runs:
+                                self.manual_runs.remove(i)
+
+
+
 
                 else:
+                    for i in list(self.manual_runs):
+                        print(f"running {i} {self.procs[i].__name__} manually...")
+                        self.procs[i]()
+                        self.manual_runs.remove(i)
                     time.sleep(self.sleep_time)
                     continue
 
@@ -48,6 +60,13 @@ class StateManager:
             pass
         else:
             self.stop_flag = True
+
+    def pause(self, i):
+        self.paused.add(i)
+
+    def resume(self, i):
+        self.manual_runs.add(i)
+        self.paused.remove(i)
 
     def stop(self):
         self.stop_flag = True

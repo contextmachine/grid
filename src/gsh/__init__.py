@@ -10,11 +10,12 @@ from googleapiclient.discovery import build
 from oauth2client.service_account import ServiceAccountCredentials
 import dotenv
 import multiprocess
+
 dotenv.load_dotenv(".env")
 
 import json
 from collections import Counter
-from termcolor import colored,cprint
+from termcolor import colored, cprint
 
 
 def get_service_sacc():
@@ -26,6 +27,7 @@ def get_service_sacc():
 
 sheet = get_service_sacc().spreadsheets()
 
+
 # import json
 
 
@@ -34,6 +36,7 @@ def resort(data, ks):
     for item in data:
         yield [item.get(k) for k in ks]
 
+
 def pair_stats(data, key='arch_type', mask='cut', sep=" ", optional=None):
     dct = dict()
     iterkey = not isinstance(key, str)
@@ -41,7 +44,7 @@ def pair_stats(data, key='arch_type', mask='cut', sep=" ", optional=None):
         spited_name = item["name"].split("_")
         projmask = item[mask]
         if projmask != 2:
-            pair_name =  spited_name[3] + "_" + spited_name[4]
+            pair_name = spited_name[3] + "_" + spited_name[4]
             if pair_name not in dct:
                 if optional is not None:
                     if item.get("Approved_zone"):
@@ -55,14 +58,15 @@ def pair_stats(data, key='arch_type', mask='cut', sep=" ", optional=None):
                     dct[pair_name] = ""
 
             if iterkey:
-                    for k in key:
-                        dct[pair_name] += f'{sep}{item[k]}'
+                for k in key:
+                    dct[pair_name] += f'{sep}{item[k]}'
             else:
-                    dct[pair_name] += f'{sep}{item[key]}'
+                dct[pair_name] += f'{sep}{item[key]}'
 
     return list(Counter(dct.values()).items())
 
-def _pair_stats(data, key='arch_type',**kwargs):
+
+def _pair_stats(data, key='arch_type', **kwargs):
     dct = dict()
     for item in data:
         spited_name = item["name"].split("_")
@@ -100,8 +104,11 @@ def approved_zone_stats(data, key='tag', mask='cut', sep=" ", optional=None):
 
 
 # https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/update
-def now(sep="T",domain='hours'):
-    return datetime.datetime.now().isoformat(sep=sep,timespec=domain)
+def now(sep="T", domain='hours'):
+    return datetime.datetime.now().isoformat(sep=sep, timespec=domain)
+
+
+def logtime(): return f"[{colored(now(sep=' '), 'light_grey')}]"
 
 
 def update_sheet(data, sheet_range, sheet_id=os.getenv("SHEET_ID")):
@@ -129,22 +136,25 @@ _table_keys = ('name',
 @dataclasses.dataclass
 class GoogleSheetApiManagerWrite:
     sheet_range: str
-    key: typing.Union[str,list[str]]
-    mask: str="cut"
+    key: typing.Union[str, list[str]]
+    mask: str = "cut"
     sep: str = " "
 
     @classmethod
     def from_dict(cls, dct):
-
         return cls(**dct)
+
+
 import threading as th
+
+
 @dataclasses.dataclass
 class GoogleSheetApiManagerState:
     sheet_id: str
     main_sheet_range: str
     table_keys: list[str]
     writes: list[GoogleSheetApiManagerWrite]
-    enable:bool=True
+    enable: bool = True
 
     @classmethod
     def from_dict(cls, dct):
@@ -156,9 +166,11 @@ class GoogleSheetApiManagerState:
 
 @dataclasses.dataclass
 class GoogleSheetApiManagerEnableEvent:
-    value:bool
+    value: bool
+
+
 class GoogleSheetApiManager:
-    def __init__(self, state: GoogleSheetApiManagerState=None, /,
+    def __init__(self, state: GoogleSheetApiManagerState = None, /,
                  sheet_id=None,
                  main_sheet_range="SW_L2_test!A1",
                  table_keys=_table_keys, writes=None, enable=True):
@@ -176,12 +188,10 @@ class GoogleSheetApiManager:
                 enable=enable
 
             )
-            self._data=[]
-
+            self._data = []
 
     def update_state(self, state: GoogleSheetApiManagerState):
         self.state = state
-
 
     def resort_table(self, data):
         return resort(data, self.state.table_keys)
@@ -189,39 +199,79 @@ class GoogleSheetApiManager:
     def update_sheet(self, data, sheet_range):
         if self.state.enable:
             return sheet.values().update(
-            spreadsheetId=self.state.sheet_id,
-            range=sheet_range,
-            valueInputOption='RAW',
-            body={'values': data}).execute()
-
+                spreadsheetId=self.state.sheet_id,
+                range=sheet_range,
+                valueInputOption='RAW',
+                body={'values': data}).execute()
 
     def update_all(self, data, sleep=0):
 
+        _data = [dict(list(i) + [("name", i.index)]) for i in data]
+        try:
 
-                    _data = [dict(list(i) + [("name", i.index)]) for i in data]
-                    try:
+            update_sheet(list(self.resort_table(_data)), sheet_range=self.state.main_sheet_range)
+            wi = iter(self.state.writes)
+            wr = next(wi)
 
-                        update_sheet(list(self.resort_table(_data)), sheet_range=self.state.main_sheet_range)
-                        wi=iter(self.state.writes)
-                        wr=next(wi)
+            while True:
+                try:
 
-                        while True:
-                            try:
-                                if wr.key == "tag":
+                    if wr.key == "tag":
+                        dd = f"{wr.sheet_range.split('!')[0]}!K2"
+                        update_sheet(pair_stats(_data, key=wr.key, mask=wr.mask, sep=wr.sep, optional="Approved_zone"),
+                                     sheet_range=dd)
+                        print(
+                            f"{logtime()} {colored('complete approved_zone update !', 'green')}")
+                        print(logtime(),
+                              colored('OK', 'cyan', attrs=('bold',)),
+                              colored(json.dumps({"status": "done", 'timestamp': now(),
+                                                  "write": {'sheet_range': dd, 'key': wr.key, 'mask': wr.mask,
+                                                            'sep': wr.sep}}), 'light_grey'))
+                        break
 
-                                    update_sheet(pair_stats(_data, key=wr.key, mask=wr.mask, sep=wr.sep, optional="Approved_zone"), sheet_range= f"{wr.sheet_range.split('!')[0]}!K2")
-                                    break
-                                wr=next(wi)
-                            except StopIteration as err:
-                                break
-                        for write in self.state.writes:
-                            time.sleep(sleep)
-                            update_sheet(pair_stats(_data, key=write.key, mask=write.mask, sep=write.sep),sheet_range=write.sheet_range)
-                        print(f"[{colored(now(sep=' '), 'light_grey')}] {colored('writing to gsheet success!', 'green')}")
+                    wr = next(wi)
 
-                    except Exception as e:
-                        print(f"[{colored(now(sep=' '), 'light_grey')}] {colored(str(e), 'red')}")
+                except Exception as err:
+                    print(f"{logtime()} {colored('break approved_zone update with internal err!', 'red')}")
+                    dd = f"{wr.sheet_range.split('!')[0]}!K2"
+                    print(logtime(),
+                          colored('ERROR', 'red', attrs=('bold',)),
+                          json.dumps({
+                              "status": "fail",
+                              'timestamp': now(),
+                              "write": {
+                                  'sheet_range': dd
 
-                        print(_data[0])
-                        time.sleep(10)
-                        self.update_all(data, sleep=1)
+                              },
+                              "error": {
+                                  'str': str(err),
+                                  "repr": repr(err)
+                              }
+                          }, indent=2), 'light_grey')
+                    break
+
+            for write in self.state.writes:
+                time.sleep(sleep)
+                update_sheet(pair_stats(_data, key=write.key, mask=write.mask, sep=write.sep),
+                             sheet_range=write.sheet_range)
+                print(logtime(),
+                      colored('OK', 'cyan', attrs=('bold',)),
+                      colored(json.dumps({"status": "done", 'timestamp': now(), "write": dataclasses.asdict(write)}),
+                              'light_grey'),
+
+                      )
+            print(f"{logtime()} {colored('writing to gsheet success!', 'green')}")
+
+
+        except Exception as e:
+            print(logtime(),
+                  colored("ERROR", 'red', attrs="BOLD"),
+                  colored(str(e), 'light_grey'))
+
+            print(_data[0])
+
+            return False
+
+        return True
+
+

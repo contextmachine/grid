@@ -64,6 +64,7 @@ if os.getenv("TEST_DEPLOYMENT")=="1":
 else:
     gsheet_spec = sets.Hset(f"{PROJECT}:gsheet").todict()
 zone_scopes=dict(sets.Hdict(f"{PROJECT}:{BLOCK}:zone_scopes"))
+zone_scopes_redis=sets.Hdict(f"{PROJECT}:{BLOCK}:zone_scopes")
 class ColorMap(dict):
     def __init__(self, *args, hset_key=f"{PROJECT}:colors", **kwargs):
         self._hset = sets.Hdict(hset_key)
