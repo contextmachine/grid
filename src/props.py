@@ -138,7 +138,7 @@ class SolvedTagColumn(ColumnType):
         a, b = item.split("-")
 
         self._own.columns["arch_type"][k] = a
-        self._own.columns["eng_type"][k] = int(b)
+        self._own.columns["eng_type"][k] = b
 
     def keys(self):
         return self._own.columns["arch_type"].keys()
