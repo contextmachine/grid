@@ -204,15 +204,16 @@ class GoogleSheetApiManager:
                 valueInputOption='RAW',
                 body={'values': data}).execute()
 
-    def update_all(self, data, sleep=0):
+    def update_all(self, data, sleep=1):
 
         _data = [dict(list(i) + [("name", i.index)]) for i in data]
         try:
 
             update_sheet(list(self.resort_table(_data)), sheet_range=self.state.main_sheet_range)
+
             wi = iter(self.state.writes)
             wr = next(wi)
-
+            time.sleep(sleep)
             while True:
                 try:
 

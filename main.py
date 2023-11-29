@@ -195,7 +195,7 @@ def gsheet_updater(arg=(40, 10)):
             calls += 1
             retry -= 1
             if retry > 0:
-                retry_caller(res.update_all())
+                retry_caller(google_sheet_manager.update_all(reflection['tris']))
 
     retry_caller(res)
 
