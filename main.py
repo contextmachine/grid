@@ -147,8 +147,8 @@ class GridStateManager(StateManager):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         super().__exit__(exc_type, exc_val, exc_tb)
-        if (exc_type, exc_val, exc_tb) != (None, None, None):
-            sys.exit(0)
+        print(logtime(), colored("ERROR", 'red', attrs=("bold",)), colored(f'thread exit with {exc_type} {exc_val} { exc_tb}', 'yellow'))
+        sys.exit(0)
 
 
 from termcolor import colored, cprint
@@ -694,8 +694,8 @@ debug_properties['target'] = f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut"
 # ttg.scale(0.001, 0.001, 0.001)
 
 if __name__ == "__main__":
-
-    with GridStateManager((gsheet_updater, on_shutdown, create_redis_snapshot), sleep_time=25) as appmanager:
+    #
+    with GridStateManager((gsheet_updater,on_shutdown, create_redis_snapshot ), sleep_time=25) as appmanager:
 
         def init():
             _dt = rconn.get(f"api:mmcore:runtime:{PROJECT}:{BLOCK}:{ZONE}:datapoints")
@@ -709,7 +709,9 @@ if __name__ == "__main__":
             pgrp = GoogleSupportRootGroup(uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels_masked_cut",
                                           name=f"{BLOCK} {ZONE}".upper(),
                                           owner_uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels")
-            # pgrp.recompute_mask()
+            #pgrp.recompute_mask()
+            pgrp.add_entries_support()
+            pgrp.add_props_update_support()
             pgrp.scale(0.001, 0.001, 0.001)
             # solve_pairs_stats(reflection=reflection,props=props_table)
             print(pgrp.uuid)

@@ -65,6 +65,24 @@ else:
     gsheet_spec = sets.Hset(f"{PROJECT}:gsheet").todict()
 zone_scopes=dict(sets.Hdict(f"{PROJECT}:{BLOCK}:zone_scopes"))
 zone_scopes_redis=sets.Hdict(f"{PROJECT}:{BLOCK}:zone_scopes")
+
+
+def normalize_str(s) -> 'str|bytes':
+    """
+    >>> normalize_str('A')
+    'A'
+    >>> normalize_str('Ф')
+    b'\xd0\xa4'
+    """
+    try:
+        val = s.encode(encoding='utf-8').decode('ascii')
+    except UnicodeDecodeError:
+
+        return s.encode(encoding='utf-8', errors='replace')
+    else:
+        return val
+
+
 class ColorMap(dict):
     def __init__(self, *args, hset_key=f"{PROJECT}:colors", **kwargs):
         self._hset = sets.Hdict(hset_key)
@@ -74,6 +92,7 @@ class ColorMap(dict):
 
     def __setitem__(self, k, item):
         if k not in self.keys():
+            k=normalize_str(k)
             self._hset[k] = item
             # mat=MeshPhongMaterial(color=ColorRGB(*item).decimal)
 
@@ -81,6 +100,7 @@ class ColorMap(dict):
         super().__setitem__(k, item)
 
     def __getitem__(self, item):
+        item=normalize_str(item)
         if item not in self._store:
             if item not in self._hset:
                 self._hset[item] = np.random.randint(30, 220, size=3).tolist()
