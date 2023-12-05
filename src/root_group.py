@@ -137,7 +137,7 @@ class MaskedRootGroup(RootGroup):
         if not self.has_entries:
             self.add_entries_support()
 
-        self.add_entry(Entry(name="update-props",
+        self.add_entry(Entry(name="update_props",
                              endpoint=EntryEndpoint(protocol=EntryProtocol.REST,
                                                     url=self.object_url+f"props-update/{self.uuid}")))
 

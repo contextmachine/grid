@@ -23,7 +23,8 @@ from src.state import StateManager
 
 dotenv.load_dotenv(dotenv_path=".env")
 reflection = dict(recompute_repr3d=True, mask_index=dict(), cutted_childs=dict(), tris_rg=dict())
-from src.props import TAGDB, colormap, rconn, cols, rmasks, sets, ColorMap, zone_scopes, gsheet_spec, PANEL_AREA, \
+from src.props import TAGDB, colormap, normalize_str, rconn, cols, rmasks, sets, ColorMap, zone_scopes, gsheet_spec, \
+    PANEL_AREA, \
     MIN_CUT, zone_scopes_redis
 
 from fastapi import FastAPI, UploadFile
@@ -231,7 +232,8 @@ class PanelMesh(AMesh):
 
     @property
     def _material(self):
-        return colormap[props_table[self.uuid]['tag']]
+
+        return  dict(colormap).get(normalize_str(props_table[self.uuid]['tag']),(100,100,100))
 
     @_material.setter
     def _material(self, v):

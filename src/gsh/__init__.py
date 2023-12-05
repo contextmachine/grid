@@ -266,7 +266,7 @@ class GoogleSheetApiManager:
 
         except Exception as e:
             print(logtime(),
-                  colored("ERROR", 'red', attrs="BOLD"),
+                  colored("ERROR", 'red', attrs="bold"),
                   colored(str(e), 'light_grey'))
 
             print(_data[0])
