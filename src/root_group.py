@@ -1,5 +1,7 @@
+import dataclasses
 import datetime
 import time
+from enum import Enum
 
 import ujson
 from mmcore.base import AGroup, adict, idict
@@ -47,12 +49,122 @@ class RootGroup(AGroup):
     def children(self):
         return [adict[child] for child in self.children_uuids]
 
+class EntryProtocol(str,Enum):
+    REST = "REST"
+    WS="WS"
+    GRAPHQL = "GRAPHQL"
+
+@dataclasses.dataclass
+class EntryEndpoint:
+    protocol:str
+    url:str
+@dataclasses.dataclass
+class Entry:
+    name:str
+    endpoint: EntryEndpoint
+    def __eq__(self, other):
+        return self.name==str(getattr(other,'name',None))
+    def __hash__(self):
+        return hash(self.name)
+
+
+def add_entry_safe(entries:list, entry:Entry):
+    if entry not in entries:
+        entries.append(entry)
+"""
+{
+  "name": "root",
+  "userData": {
+    "entries":[
+    {
+      "name": "update_props",
+      "endpoint": {
+        "protocol": "REST",
+        "url": "..."
+      }
+    },
+    {
+      "name": "control_points",
+      "endpoint": {
+        "protocol": "WS",
+        "url": "..."
+       }
+     }
+   ]
+  }
+}
+"""
+def asdict(obj):
+    if dataclasses.is_dataclass(obj):
+        return dataclasses.asdict(obj)
+    elif isinstance(obj,(list,tuple,set)):
+        return [asdict(o)for o in obj]
+    elif isinstance(obj,dict):
+        return {k:asdict(o) for k,o in obj.items()}
+    else:
+        return obj
 
 class MaskedRootGroup(RootGroup):
     _mask_name = None
     _owner_uuid = ''
     _children_uuids = None
+
+    _user_data_extras = None
     cache=None
+
+
+    def __new__(cls, *args,user_data_extras=None,entries_support=True,props_update_support=True, **kwargs):
+        if user_data_extras is None:
+            user_data_extras=dict()
+        obj=super().__new__(cls,*args,_user_data_extras= user_data_extras,**kwargs)
+
+
+        return obj
+    @property
+    def object_url(self):
+        return self.__class__.__gui_controls__.config.address + self.__class__.__gui_controls__.config.api_prefix
+
+    def add_entry(self, entry:Entry):
+        add_entry_safe(self._user_data_extras['entries'], entry)
+
+    @property
+    def has_entries(self):
+        return 'entries' in self._user_data_extras
+
+    def add_entries_support(self):
+        if not self.has_entries:
+            self.add_user_data_extra("entries", [])
+    def add_props_update_support(self):
+        if not self.has_entries:
+            self.add_entries_support()
+
+        self.add_entry(Entry(name="update_props",
+                             endpoint=EntryEndpoint(protocol="REST",
+                                                    url=self.object_url+f"props-update/{self.uuid}")))
+
+    def add_user_data_extra(self, key, value):
+        if key not in self._user_data_extras:
+            self._user_data_extras[key]=value
+        else:
+            pass
+    @property
+    def entries(self):
+        return self._user_data_extras.get('entries', None)
+    @entries.setter
+    def entries(self, v):
+        self._user_data_extras['entries']=v
+
+    def update_entries(self, v):
+        if 'entries' not in self._user_data_extras:
+
+            self.entries=v
+        else:
+            self._user_data_extras['entries'] = v
+
+    def __call__(self, *args, **kwargs):
+        dct=super().__call__(*args, **kwargs)
+        dct['userData']|= asdict(self._user_data_extras)
+        return dct
     def props_update(self, uuids: list[str], props: dict):
         #recompute_mask = False
         print(props)

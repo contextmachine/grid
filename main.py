@@ -710,6 +710,9 @@ if __name__ == "__main__":
                                           name=f"{BLOCK} {ZONE}".upper(),
                                           owner_uuid=f"{PROJECT}_{BLOCK}_{ZONE}_panels")
             # pgrp.recompute_mask()
+            pgrp.add_entries_support()
+            pgrp.add_props_update_support()
+
             pgrp.scale(0.001, 0.001, 0.001)
             # solve_pairs_stats(reflection=reflection,props=props_table)
             print(pgrp.uuid)
